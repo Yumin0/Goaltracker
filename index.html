@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Goal Tracker</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #222; min-height: 100vh; }
+
+  /* ── top bar ── */
+  header { background: #fff; border-bottom: 1px solid #e5e5e5; padding: 14px 20px;
+           display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  #api-status { font-size: 12px; padding: 3px 10px; border-radius: 20px; }
+  #api-status.ok  { background: #e1f5ee; color: #0f6e56; }
+  #api-status.err { background: #fce9e9; color: #a32d2d; }
+  #api-status.loading { background: #e6f1fb; color: #185fa5; }
+
+  /* ── layout ── */
+  main { max-width: 700px; margin: 0 auto; padding: 20px 16px 60px; }
+
+  /* ── section card ── */
+  .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px;
+          padding: 20px; margin-bottom: 20px; }
+  .card h2 { font-size: 15px; font-weight: 600; margin-bottom: 16px;
+             padding-bottom: 10px; border-bottom: 1px solid #f0f0f0; }
+
+  /* ── forms ── */
+  .form-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  label { font-size: 13px; color: #555; font-weight: 500; }
+  input, select, textarea {
+    padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px;
+    font-size: 14px; font-family: inherit; width: 100%;
+    transition: border-color .15s; background: #fafafa; }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: #666; background: #fff; }
+  textarea { resize: vertical; min-height: 70px; }
+
+  .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+
+  button {
+    padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 500;
+    cursor: pointer; border: 1px solid #ddd; background: #fff; transition: all .15s; }
+  button:hover { background: #f5f5f5; }
+  button.primary { background: #222; color: #fff; border-color: #222; }
+  button.primary:hover { background: #444; }
+  button.small { padding: 6px 12px; font-size: 13px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+
+  /* ── goals list ── */
+  .goal-item { border: 1px solid #eee; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+  .goal-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+  .badge.work { background: #eeedfe; color: #534ab7; }
+  .badge.life { background: #e1f5ee; color: #0f6e56; }
+  .goal-title { font-weight: 600; font-size: 15px; flex: 1; }
+  .goal-meta { font-size: 12px; color: #888; margin-bottom: 8px; }
+
+  /* progress bar */
+  .progress-wrap { background: #f0f0f0; border-radius: 4px; height: 6px; margin-bottom: 4px; }
+  .progress-bar { height: 6px; border-radius: 4px; background: #534ab7; transition: width .3s; }
+  .progress-bar.life { background: #1d9e75; }
+  .progress-label { font-size: 12px; color: #888; }
+
+  /* milestones */
+  .ms-list { margin-top: 12px; border-top: 1px solid #f0f0f0; padding-top: 10px; }
+  .ms-item { display: flex; align-items: center; gap: 10px; padding: 7px 0;
+             border-bottom: 1px solid #f8f8f8; font-size: 14px; }
+  .ms-item:last-child { border-bottom: none; }
+  .ms-item input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; accent-color: #534ab7; }
+  .ms-title { flex: 1; }
+  .ms-title.done { text-decoration: line-through; color: #aaa; }
+  .ms-date { font-size: 11px; color: #aaa; }
+
+  /* inline add milestone */
+  .ms-add { display: flex; gap: 8px; margin-top: 10px; }
+  .ms-add input { flex: 1; padding: 7px 10px; font-size: 13px; }
+  .ms-add button { padding: 7px 14px; font-size: 13px; flex-shrink: 0; }
+
+  /* ── toast ── */
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+           background: #222; color: #fff; padding: 10px 20px; border-radius: 8px;
+           font-size: 14px; transition: transform .25s; z-index: 100; pointer-events: none; }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.err   { background: #a32d2d; }
+
+  /* ── tabs ── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+  .tab { padding: 7px 16px; border-radius: 8px; font-size: 14px; border: 1px solid #e5e5e5;
+         cursor: pointer; background: #fff; }
+  .tab.active { background: #222; color: #fff; border-color: #222; }
+
+  /* ── empty state ── */
+  .empty { text-align: center; color: #bbb; padding: 32px 0; font-size: 14px; }
+
+  /* ── loading spinner ── */
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ddd;
+             border-top-color: #666; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎯 Goal Tracker</h1>
+  <span id="api-status" class="loading">連線中…</span>
+</header>
+
+<main>
+
+  <!-- ① 設定 API URL（第一次使用） -->
+  <div class="card" id="config-card">
+    <h2>⚙️ API 設定</h2>
+    <div class="form-row">
+      <label>Apps Script 部署網址</label>
+      <input id="api-url" type="url" placeholder="https://script.google.com/macros/s/xxx/exec">
+    </div>
+    <div class="form-row">
+      <label>Token 密碼</label>
+      <input id="api-token" type="text" value="goaltracker2026">
+    </div>
+    <div class="btn-row">
+      <button class="primary" onclick="saveConfig()">儲存並測試連線</button>
+      <button onclick="toggleConfig()">收起</button>
+    </div>
+  </div>
+
+  <!-- ② 新增目標 -->
+  <div class="card">
+    <h2>➕ 新增目標</h2>
+    <div class="form-row">
+      <label>目標名稱 *</label>
+      <input id="g-title" type="text" placeholder="例：完成 Q3 產品上線">
+    </div>
+    <div class="form-row-2">
+      <div class="form-row" style="margin:0">
+        <label>類別</label>
+        <select id="g-category">
+          <option value="work">💼 工作</option>
+          <option value="life">🌿 生活</option>
+        </select>
+      </div>
+      <div class="form-row" style="margin:0">
+        <label>截止日</label>
+        <input id="g-date" type="date">
+      </div>
+    </div>
+    <div class="form-row">
+      <label>說明（選填）</label>
+      <textarea id="g-desc" placeholder="目標背景或細節…"></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="primary" onclick="createGoal()">新增目標</button>
+    </div>
+  </div>
+
+  <!-- ③ 目標列表 -->
+  <div class="card">
+    <h2>📋 目標列表</h2>
+    <div class="tabs">
+      <button class="tab active" onclick="setTab('all', this)">全部</button>
+      <button class="tab" onclick="setTab('work', this)">💼 工作</button>
+      <button class="tab" onclick="setTab('life', this)">🌿 生活</button>
+    </div>
+    <div id="goals-list"><div class="empty">載入中… <span class="spinner"></span></div></div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ── state ──────────────────────────────────────────────────
+let API_URL   = localStorage.getItem("gt_url")   || "";
+let API_TOKEN = localStorage.getItem("gt_token") || "goaltracker2026";
+let allGoals  = [];
+let activeTab = "all";
+
+// ── init ───────────────────────────────────────────────────
+window.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("api-url").value   = API_URL;
+  document.getElementById("api-token").value = API_TOKEN;
+  if (API_URL) {
+    document.getElementById("config-card").style.display = "none";
+    loadGoals();
+  } else {
+    setStatus("請設定 API 網址", false);
+    document.getElementById("goals-list").innerHTML = '<div class="empty">請先設定上方 API 網址</div>';
+  }
+});
+
+// ── config ─────────────────────────────────────────────────
+function toggleConfig() {
+  const card = document.getElementById("config-card");
+  card.style.display = card.style.display === "none" ? "block" : "none";
+}
+
+async function saveConfig() {
+  API_URL   = document.getElementById("api-url").value.trim();
+  API_TOKEN = document.getElementById("api-token").value.trim();
+  localStorage.setItem("gt_url",   API_URL);
+  localStorage.setItem("gt_token", API_TOKEN);
+  setStatus("連線中…", null);
+  await loadGoals();
+  document.getElementById("config-card").style.display = "none";
+}
+
+// ── API call ───────────────────────────────────────────────
+async function api(params) {
+  if (!API_URL) { toast("請先設定 API 網址", true); throw new Error("No API URL"); }
+  const url = new URL(API_URL);
+  url.searchParams.set("token", API_TOKEN);
+  Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== "") url.searchParams.set(k, v); });
+  const res  = await fetch(url.toString());
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || "API error");
+  return data;
+}
+
+// ── load goals ─────────────────────────────────────────────
+async function loadGoals() {
+  try {
+    const data = await api({ action: "getGoals" });
+    allGoals = data.data;
+    setStatus("已連線 ✓", true);
+    renderGoals();
+  } catch (e) {
+    setStatus("連線失敗", false);
+    document.getElementById("goals-list").innerHTML = `<div class="empty">❌ ${e.message}<br><small>請確認 API 網址與 Token</small></div>`;
+  }
+}
+
+// ── render goals ───────────────────────────────────────────
+function setTab(tab, el) {
+  activeTab = tab;
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  el.classList.add("active");
+  renderGoals();
+}
+
+function renderGoals() {
+  const list = document.getElementById("goals-list");
+  let goals  = allGoals.filter(g => g.status !== "done" && g.status !== "archived");
+  if (activeTab !== "all") goals = goals.filter(g => g.category === activeTab);
+  if (!goals.length) { list.innerHTML = '<div class="empty">目前沒有進行中的目標</div>'; return; }
+
+  list.innerHTML = goals.map(g => {
+    const total = g.milestones.length;
+    const done  = g.milestones.filter(m => m.status === "done").length;
+    const pct   = total ? Math.round(done / total * 100) : 0;
+    const isLife = g.category === "life";
+
+    const msHtml = g.milestones.map(m => `
+      <div class="ms-item">
+        <input type="checkbox" ${m.status==="done"?"checked":""} onchange="toggleMs('${m.milestone_id}', this)">
+        <span class="ms-title ${m.status==="done"?"done":""}">${esc(m.title)}</span>
+        ${m.completed_at ? `<span class="ms-date">${m.completed_at.slice(5,10)}</span>` : ""}
+      </div>`).join("");
+
+    return `
+    <div class="goal-item" id="goal-${g.goal_id}">
+      <div class="goal-header">
+        <span class="badge ${g.category}">${isLife?"🌿 生活":"💼 工作"}</span>
+        <span class="goal-title">${esc(g.title)}</span>
+      </div>
+      <div class="goal-meta">${g.target_date ? "截止 " + g.target_date : "無截止日"} · ${done}/${total} 里程碑</div>
+      <div class="progress-wrap"><div class="progress-bar ${isLife?"life":""}" style="width:${pct}%"></div></div>
+      <div class="progress-label">${pct}%</div>
+      ${total ? `<div class="ms-list">${msHtml}</div>` : ""}
+      <div class="ms-add">
+        <input type="text" placeholder="新增里程碑…" id="ms-input-${g.goal_id}" onkeydown="if(event.key==='Enter')addMs('${g.goal_id}')">
+        <button class="small primary" onclick="addMs('${g.goal_id}')">+新增</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// ── create goal ────────────────────────────────────────────
+async function createGoal() {
+  const title = document.getElementById("g-title").value.trim();
+  if (!title) { toast("請輸入目標名稱", true); return; }
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = "新增中…";
+  try {
+    await api({
+      action: "createGoal",
+      title,
+      category:    document.getElementById("g-category").value,
+      target_date: document.getElementById("g-date").value,
+      description: document.getElementById("g-desc").value.trim()
+    });
+    document.getElementById("g-title").value = "";
+    document.getElementById("g-date").value  = "";
+    document.getElementById("g-desc").value  = "";
+    toast("目標已新增！");
+    await loadGoals();
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "新增目標";
+  }
+}
+
+// ── add milestone ──────────────────────────────────────────
+async function addMs(goalId) {
+  const input = document.getElementById("ms-input-" + goalId);
+  const title = input.value.trim();
+  if (!title) return;
+  input.disabled = true;
+  try {
+    await api({ action: "createMilestone", goal_id: goalId, title });
+    input.value = "";
+    toast("里程碑已新增！");
+    await loadGoals();
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    input.disabled = false; input.focus();
+  }
+}
+
+// ── toggle milestone ───────────────────────────────────────
+async function toggleMs(msId, checkbox) {
+  checkbox.disabled = true;
+  try {
+    await api({ action: "toggleMilestone", milestone_id: msId });
+    await loadGoals();
+  } catch (e) {
+    toast(e.message, true);
+    checkbox.checked = !checkbox.checked;
+  } finally {
+    checkbox.disabled = false;
+  }
+}
+
+// ── helpers ────────────────────────────────────────────────
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function setStatus(msg, ok) {
+  const el = document.getElementById("api-status");
+  el.textContent = msg;
+  el.className = ok === true ? "ok" : ok === false ? "err" : "loading";
+}
+let toastTimer;
+function toast(msg, isErr = false) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className = isErr ? "err show" : "show";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = isErr ? "err" : "", 2500);
+}
+</script>
+</body>
+</html>
