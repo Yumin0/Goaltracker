@@ -12,41 +12,18 @@
   header { background: #fff; border-bottom: 1px solid #e5e5e5; padding: 14px 20px;
            display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
   header h1 { font-size: 18px; font-weight: 600; }
+
   /* ── layout ── */
-  main { max-width: 700px; margin: 0 auto; padding: 20px 16px 60px; }
+  main { max-width: 700px; margin: 0 auto; padding: 16px 16px 80px; }
 
-  /* ── section card ── */
-  .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px;
-          padding: 20px; margin-bottom: 20px; }
-  .card h2 { font-size: 15px; font-weight: 600; margin-bottom: 16px;
-             padding-bottom: 10px; border-bottom: 1px solid #f0f0f0; }
-
-  /* ── forms ── */
-  .form-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-  label { font-size: 13px; color: #555; font-weight: 500; }
-  input, select, textarea {
-    padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px;
-    font-size: 14px; font-family: inherit; width: 100%;
-    transition: border-color .15s; background: #fafafa; }
-  input:focus, select:focus, textarea:focus {
-    outline: none; border-color: #666; background: #fff; }
-  textarea { resize: vertical; min-height: 70px; }
-
-  .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-
-  button {
-    padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 500;
-    cursor: pointer; border: 1px solid #ddd; background: #fff; transition: all .15s; }
-  button:hover { background: #f5f5f5; }
-  button.primary { background: #222; color: #fff; border-color: #222; }
-  button.primary:hover { background: #444; }
-  button.small { padding: 6px 12px; font-size: 13px; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-
-  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+  /* ── tabs ── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+  .tab { padding: 7px 16px; border-radius: 8px; font-size: 14px; border: 1px solid #e5e5e5;
+         cursor: pointer; background: #fff; }
+  .tab.active { background: #222; color: #fff; border-color: #222; }
 
   /* ── goals list ── */
-  .goal-item { border: 1px solid #eee; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+  .goal-item { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
   .goal-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
   .badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
   .badge.work { background: #eeedfe; color: #534ab7; }
@@ -75,18 +52,65 @@
   .ms-add input { flex: 1; padding: 7px 10px; font-size: 13px; }
   .ms-add button { padding: 7px 14px; font-size: 13px; flex-shrink: 0; }
 
+  /* ── button base ── */
+  button {
+    padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 500;
+    cursor: pointer; border: 1px solid #ddd; background: #fff; transition: all .15s; }
+  button:hover { background: #f5f5f5; }
+  button.primary { background: #222; color: #fff; border-color: #222; }
+  button.primary:hover { background: #444; }
+  button.small { padding: 6px 12px; font-size: 13px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ── FAB ── */
+  .fab {
+    position: fixed; bottom: 28px; right: 24px; z-index: 20;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: #222; color: #fff; border: none;
+    font-size: 26px; line-height: 1; font-weight: 300;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,.25); cursor: pointer;
+    transition: background .15s, transform .15s; padding: 0; }
+  .fab:hover { background: #444; transform: scale(1.07); }
+
+  /* ── modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 50; padding: 20px;
+    opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .modal-overlay.open { opacity: 1; pointer-events: auto; }
+  .modal {
+    background: #fff; border-radius: 14px; padding: 24px;
+    width: 100%; max-width: 480px;
+    transform: translateY(20px); transition: transform .2s; }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .modal-header h2 { font-size: 16px; font-weight: 600; }
+  .modal-close {
+    background: none; border: none; font-size: 18px; color: #999;
+    cursor: pointer; padding: 4px 8px; line-height: 1; }
+  .modal-close:hover { color: #333; background: #f0f0f0; border-radius: 6px; }
+
+  /* ── forms (inside modal) ── */
+  .form-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  label { font-size: 13px; color: #555; font-weight: 500; }
+  input, select, textarea {
+    padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px;
+    font-size: 14px; font-family: inherit; width: 100%;
+    transition: border-color .15s; background: #fafafa; }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: #666; background: #fff; }
+  textarea { resize: vertical; min-height: 70px; }
+  .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+
   /* ── toast ── */
   #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
            background: #222; color: #fff; padding: 10px 20px; border-radius: 8px;
            font-size: 14px; transition: transform .25s; z-index: 100; pointer-events: none; }
   #toast.show { transform: translateX(-50%) translateY(0); }
   #toast.err   { background: #a32d2d; }
-
-  /* ── tabs ── */
-  .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
-  .tab { padding: 7px 16px; border-radius: 8px; font-size: 14px; border: 1px solid #e5e5e5;
-         cursor: pointer; background: #fff; }
-  .tab.active { background: #222; color: #fff; border-color: #222; }
 
   /* ── empty state ── */
   .empty { text-align: center; color: #bbb; padding: 32px 0; font-size: 14px; }
@@ -104,10 +128,27 @@
 </header>
 
 <main>
+  <!-- 分類 tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="setTab('all', this)">全部</button>
+    <button class="tab" onclick="setTab('work', this)">💼 工作</button>
+    <button class="tab" onclick="setTab('life', this)">🌿 生活</button>
+  </div>
 
-  <!-- ① 新增目標 -->
-  <div class="card">
-    <h2>➕ 新增目標</h2>
+  <!-- 目標列表 -->
+  <div id="goals-list"><div class="empty">載入中… <span class="spinner"></span></div></div>
+</main>
+
+<!-- 右下角新增按鈕 -->
+<button class="fab" onclick="openModal()" title="新增目標">＋</button>
+
+<!-- 新增目標 Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>➕ 新增目標</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
     <div class="form-row">
       <label>目標名稱 *</label>
       <input id="g-title" type="text" placeholder="例：完成 Q3 產品上線">
@@ -130,22 +171,11 @@
       <textarea id="g-desc" placeholder="目標背景或細節…"></textarea>
     </div>
     <div class="btn-row">
-      <button class="primary" onclick="createGoal()">新增目標</button>
+      <button class="primary" id="create-btn" onclick="createGoal()">新增目標</button>
+      <button onclick="closeModal()">取消</button>
     </div>
   </div>
-
-  <!-- ③ 目標列表 -->
-  <div class="card">
-    <h2>📋 目標列表</h2>
-    <div class="tabs">
-      <button class="tab active" onclick="setTab('all', this)">全部</button>
-      <button class="tab" onclick="setTab('work', this)">💼 工作</button>
-      <button class="tab" onclick="setTab('life', this)">🌿 生活</button>
-    </div>
-    <div id="goals-list"><div class="empty">載入中… <span class="spinner"></span></div></div>
-  </div>
-
-</main>
+</div>
 
 <div id="toast"></div>
 
@@ -160,6 +190,19 @@ let activeTab = "all";
 window.addEventListener("DOMContentLoaded", () => {
   loadGoals();
 });
+
+// ── modal ──────────────────────────────────────────────────
+function openModal() {
+  document.getElementById("modal-overlay").classList.add("open");
+  setTimeout(() => document.getElementById("g-title").focus(), 50);
+}
+function closeModal() {
+  document.getElementById("modal-overlay").classList.remove("open");
+}
+function closeModalOverlay(e) {
+  if (e.target === document.getElementById("modal-overlay")) closeModal();
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
 
 // ── API call ───────────────────────────────────────────────
 async function api(params) {
@@ -234,7 +277,7 @@ function renderGoals() {
 async function createGoal() {
   const title = document.getElementById("g-title").value.trim();
   if (!title) { toast("請輸入目標名稱", true); return; }
-  const btn = event.target;
+  const btn = document.getElementById("create-btn");
   btn.disabled = true; btn.textContent = "新增中…";
   try {
     await api({
@@ -248,6 +291,7 @@ async function createGoal() {
     document.getElementById("g-date").value  = "";
     document.getElementById("g-desc").value  = "";
     toast("目標已新增！");
+    closeModal();
     await loadGoals();
   } catch (e) {
     toast(e.message, true);
