@@ -67,7 +67,7 @@
   .ms-btn.danger { color: #a32d2d; border-color: #f5c6c6; }
   .ms-btn.danger:hover { background: #fff0f0; }
 
-  /* inline add/edit milestone */
+  /* inline add milestone */
   .ms-add { display: flex; gap: 8px; margin-top: 10px; }
   .ms-add input { flex: 1; padding: 7px 10px; font-size: 13px; }
   .ms-add button { padding: 7px 14px; font-size: 13px; flex-shrink: 0; }
@@ -112,7 +112,7 @@
     cursor: pointer; padding: 4px 8px; line-height: 1; }
   .modal-close:hover { color: #333; background: #f0f0f0; border-radius: 6px; }
 
-  /* ── forms (inside modal) ── */
+  /* ── forms ── */
   .form-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
   label { font-size: 13px; color: #555; font-weight: 500; }
   input, select, textarea {
@@ -163,18 +163,14 @@
 </header>
 
 <main>
-  <!-- 分類 tabs -->
   <div class="tabs">
     <button class="tab active" onclick="setTab('all', this)">全部</button>
     <button class="tab" onclick="setTab('work', this)">💼 工作</button>
     <button class="tab" onclick="setTab('life', this)">🌿 生活</button>
   </div>
-
-  <!-- 目標列表 -->
   <div id="goals-list"><div class="empty">載入中… <span class="spinner"></span></div></div>
 </main>
 
-<!-- 右下角新增按鈕 -->
 <button class="fab" onclick="openGoalModal()" title="新增目標">＋</button>
 
 <!-- 新增 / 編輯目標 Modal -->
@@ -247,67 +243,44 @@
 // ── 設定 ──────────────────────────────────────────────────
 const API_URL   = "https://script.google.com/macros/s/AKfycbwq9Q7f4XFF0LmsdTgx65eM4V32jAic4ReAIn-CVBmwMEUW4gRXDi1jB1uXovQ-2AgYZA/exec";
 const API_TOKEN = "goaltracker2026";
-const LS_KEY    = "goaltracker_data";
 
 // ── state ──────────────────────────────────────────────────
-let allGoals      = [];
-let activeTab     = "all";
-let editingGoalId = null;   // null = 新增, 否則為編輯中的 goal_id
-let editingMsId   = null;   // 編輯中的 milestone_id
-let editingMsGoalId = null; // 編輯里程碑所屬的 goal_id
+let allGoals        = [];
+let activeTab       = "all";
+let editingGoalId   = null;
+let editingMsId     = null;
+let editingMsGoalId = null;
 const expandedGoals = new Set();
 
 // ── init ───────────────────────────────────────────────────
-window.addEventListener("DOMContentLoaded", () => {
-  loadGoals();
-});
+window.addEventListener("DOMContentLoaded", loadGoals);
 
-// ── localStorage helpers ───────────────────────────────────
-function lsLoad() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY)) || null; } catch { return null; }
-}
-function lsSave(data) {
-  localStorage.setItem(LS_KEY, JSON.stringify(data));
-}
-function genId(prefix) {
-  return prefix + "_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
-}
-
-// ── API call（只用於初次載入） ──────────────────────────────
-async function fetchFromApi() {
+// ── API call ───────────────────────────────────────────────
+async function api(params) {
   const url = new URL(API_URL);
   url.searchParams.set("token", API_TOKEN);
-  url.searchParams.set("action", "getGoals");
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) url.searchParams.set(k, v);
+  });
   const res  = await fetch(url.toString());
   const data = await res.json();
-  if (!data.success) throw new Error(data.error || "API error");
-  return data.data;
+  if (!data.success) throw new Error(data.error || "API 錯誤");
+  return data;
 }
 
 // ── load goals ─────────────────────────────────────────────
 async function loadGoals() {
-  const cached = lsLoad();
-  if (cached) {
-    allGoals = cached;
-    renderGoals();
-    return;
-  }
-  // 首次載入：嘗試從 API 同步資料
   try {
-    const data = await fetchFromApi();
-    allGoals = data;
-    lsSave(allGoals);
+    const data = await api({ action: "getGoals" });
+    allGoals = data.data;
     renderGoals();
   } catch (e) {
-    // API 不可用時，從空白開始
-    allGoals = [];
-    lsSave(allGoals);
-    renderGoals();
-    toast("無法連線 API，以本機模式運作", true);
+    toast("連線失敗：" + e.message, true);
+    document.getElementById("goals-list").innerHTML = `<div class="empty">❌ ${esc(e.message)}</div>`;
   }
 }
 
-// ── render goals ───────────────────────────────────────────
+// ── tabs & expand ──────────────────────────────────────────
 function setTab(tab, el) {
   activeTab = tab;
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -327,6 +300,7 @@ function toggleGoal(goalId) {
   }
 }
 
+// ── render ─────────────────────────────────────────────────
 function renderGoals() {
   const list = document.getElementById("goals-list");
   let goals  = allGoals.filter(g => g.status !== "done" && g.status !== "archived");
@@ -342,7 +316,7 @@ function renderGoals() {
 
     const msHtml = (g.milestones || []).map(m => `
       <div class="ms-item">
-        <input type="checkbox" ${m.status==="done"?"checked":""} onchange="toggleMs('${g.goal_id}','${m.milestone_id}', this)">
+        <input type="checkbox" ${m.status==="done"?"checked":""} onchange="toggleMs('${m.milestone_id}', this)">
         <span class="ms-title ${m.status==="done"?"done":""}">${esc(m.title)}</span>
         ${m.completed_at ? `<span class="ms-date">${String(m.completed_at).slice(5,10)}</span>` : ""}
         <button class="ms-btn" onclick="openMsEditModal('${g.goal_id}','${m.milestone_id}')">編輯</button>
@@ -364,7 +338,8 @@ function renderGoals() {
       <div class="goal-detail">
         ${msHtml}
         <div class="ms-add">
-          <input type="text" placeholder="新增里程碑…" id="ms-input-${g.goal_id}" onkeydown="if(event.key==='Enter')addMs('${g.goal_id}')">
+          <input type="text" placeholder="新增里程碑…" id="ms-input-${g.goal_id}"
+                 onkeydown="if(event.key==='Enter')addMs('${g.goal_id}')">
           <button class="small primary" onclick="addMs('${g.goal_id}')">+新增</button>
         </div>
         <div class="goal-actions">
@@ -376,15 +351,15 @@ function renderGoals() {
   }).join("");
 }
 
-// ── 目標 Modal (新增 / 編輯) ────────────────────────────────
+// ── 目標 Modal ─────────────────────────────────────────────
 function openGoalModal() {
   editingGoalId = null;
   document.getElementById("modal-title").textContent = "➕ 新增目標";
   document.getElementById("save-btn").textContent = "新增目標";
-  document.getElementById("g-title").value = "";
+  document.getElementById("g-title").value    = "";
   document.getElementById("g-category").value = "work";
-  document.getElementById("g-date").value = "";
-  document.getElementById("g-desc").value = "";
+  document.getElementById("g-date").value     = "";
+  document.getElementById("g-desc").value     = "";
   document.getElementById("modal-overlay").classList.add("open");
   setTimeout(() => document.getElementById("g-title").focus(), 50);
 }
@@ -393,122 +368,112 @@ function openGoalEditModal(goalId) {
   const goal = allGoals.find(g => g.goal_id === goalId);
   if (!goal) return;
   editingGoalId = goalId;
-  document.getElementById("modal-title").textContent = "✏️ 編輯目標";
-  document.getElementById("save-btn").textContent = "儲存修改";
-  document.getElementById("g-title").value = goal.title || "";
+  document.getElementById("modal-title").textContent  = "✏️ 編輯目標";
+  document.getElementById("save-btn").textContent     = "儲存修改";
+  document.getElementById("g-title").value    = goal.title || "";
   document.getElementById("g-category").value = goal.category || "work";
-  document.getElementById("g-date").value = goal.target_date || "";
-  document.getElementById("g-desc").value = goal.description || "";
+  document.getElementById("g-date").value     = goal.target_date || "";
+  document.getElementById("g-desc").value     = goal.description || "";
   document.getElementById("modal-overlay").classList.add("open");
   setTimeout(() => document.getElementById("g-title").focus(), 50);
 }
 
-function closeModal() {
-  document.getElementById("modal-overlay").classList.remove("open");
-}
-function closeModalOverlay(e) {
-  if (e.target === document.getElementById("modal-overlay")) closeModal();
-}
+function closeModal() { document.getElementById("modal-overlay").classList.remove("open"); }
+function closeModalOverlay(e) { if (e.target === document.getElementById("modal-overlay")) closeModal(); }
 document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); closeMsModal(); } });
 
-// ── 儲存目標（新增或編輯）────────────────────────────────────
-function saveGoal() {
+// ── 儲存目標（新增 / 編輯）────────────────────────────────────
+async function saveGoal() {
   const title = document.getElementById("g-title").value.trim();
   if (!title) { toast("請輸入目標名稱", true); return; }
   const btn = document.getElementById("save-btn");
   btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = "儲存中…";
 
-  const category    = document.getElementById("g-category").value;
-  const target_date = document.getElementById("g-date").value;
-  const description = document.getElementById("g-desc").value.trim();
+  const params = {
+    title,
+    category:    document.getElementById("g-category").value,
+    target_date: document.getElementById("g-date").value,
+    description: document.getElementById("g-desc").value.trim()
+  };
 
-  if (editingGoalId) {
-    // 編輯現有目標
-    const goal = allGoals.find(g => g.goal_id === editingGoalId);
-    if (goal) {
-      goal.title       = title;
-      goal.category    = category;
-      goal.target_date = target_date;
-      goal.description = description;
+  try {
+    if (editingGoalId) {
+      await api({ action: "updateGoal", goal_id: editingGoalId, ...params });
+      toast("目標已更新！");
+    } else {
+      await api({ action: "createGoal", ...params });
+      toast("目標已新增！");
     }
-    lsSave(allGoals);
-    toast("目標已更新！");
-  } else {
-    // 新增目標
-    const newGoal = {
-      goal_id:     genId("g"),
-      title,
-      category,
-      target_date,
-      description,
-      status:      "active",
-      milestones:  []
-    };
-    allGoals.push(newGoal);
-    lsSave(allGoals);
-    toast("目標已新增！");
+    closeModal();
+    await loadGoals();
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
   }
-
-  btn.disabled = false;
-  closeModal();
-  renderGoals();
 }
 
 // ── 刪除目標 ───────────────────────────────────────────────
 function confirmDeleteGoal(goalId) {
   const goal = allGoals.find(g => g.goal_id === goalId);
   if (!goal) return;
-  showConfirm(`確定要刪除目標「${goal.title}」嗎？\n此操作無法復原。`, () => {
-    allGoals = allGoals.filter(g => g.goal_id !== goalId);
-    lsSave(allGoals);
-    expandedGoals.delete(goalId);
-    toast("目標已刪除");
-    renderGoals();
+  showConfirm(`確定要刪除目標「${goal.title}」嗎？\n此操作無法復原。`, async () => {
+    try {
+      await api({ action: "deleteGoal", goal_id: goalId });
+      expandedGoals.delete(goalId);
+      toast("目標已刪除");
+      await loadGoals();
+    } catch (e) {
+      toast(e.message, true);
+    }
   });
 }
 
 // ── 新增里程碑 ─────────────────────────────────────────────
-function addMs(goalId) {
+async function addMs(goalId) {
   const input = document.getElementById("ms-input-" + goalId);
   const title = input.value.trim();
   if (!title) return;
-  const goal = allGoals.find(g => g.goal_id === goalId);
-  if (!goal) return;
-  if (!goal.milestones) goal.milestones = [];
-  goal.milestones.push({
-    milestone_id: genId("m"),
-    goal_id:      goalId,
-    title,
-    status:       "pending",
-    completed_at: null
-  });
-  lsSave(allGoals);
-  input.value = "";
-  toast("里程碑已新增！");
-  renderGoals();
-  // 保持展開狀態
-  expandedGoals.add(goalId);
-  const el = document.getElementById("goal-" + goalId);
-  if (el) el.classList.add("open");
+  input.disabled = true;
+  try {
+    await api({ action: "createMilestone", goal_id: goalId, title });
+    input.value = "";
+    toast("里程碑已新增！");
+    await loadGoals();
+    expandedGoals.add(goalId);
+    const el = document.getElementById("goal-" + goalId);
+    if (el) el.classList.add("open");
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    input.disabled = false;
+    input.focus();
+  }
 }
 
 // ── 切換里程碑完成狀態 ─────────────────────────────────────
-function toggleMs(goalId, msId, checkbox) {
-  const goal = allGoals.find(g => g.goal_id === goalId);
-  if (!goal) return;
-  const ms = (goal.milestones || []).find(m => m.milestone_id === msId);
-  if (!ms) return;
-  ms.status = checkbox.checked ? "done" : "pending";
-  ms.completed_at = checkbox.checked ? new Date().toISOString().slice(0, 10) : null;
-  lsSave(allGoals);
-  renderGoals();
-  // 保持展開狀態
-  expandedGoals.add(goalId);
-  const el = document.getElementById("goal-" + goalId);
-  if (el) el.classList.add("open");
+async function toggleMs(msId, checkbox) {
+  checkbox.disabled = true;
+  try {
+    await api({ action: "toggleMilestone", milestone_id: msId });
+    await loadGoals();
+    // 保持所有已展開的目標
+    expandedGoals.forEach(id => {
+      const el = document.getElementById("goal-" + id);
+      if (el) el.classList.add("open");
+    });
+  } catch (e) {
+    toast(e.message, true);
+    checkbox.checked = !checkbox.checked;
+  } finally {
+    checkbox.disabled = false;
+  }
 }
 
-// ── 里程碑 編輯 Modal ──────────────────────────────────────
+// ── 里程碑編輯 Modal ───────────────────────────────────────
 function openMsEditModal(goalId, msId) {
   const goal = allGoals.find(g => g.goal_id === goalId);
   if (!goal) return;
@@ -521,28 +486,29 @@ function openMsEditModal(goalId, msId) {
   setTimeout(() => document.getElementById("ms-edit-title").focus(), 50);
 }
 
-function closeMsModal() {
-  document.getElementById("ms-modal-overlay").classList.remove("open");
-}
-function closeMsModalOverlay(e) {
-  if (e.target === document.getElementById("ms-modal-overlay")) closeMsModal();
-}
+function closeMsModal() { document.getElementById("ms-modal-overlay").classList.remove("open"); }
+function closeMsModalOverlay(e) { if (e.target === document.getElementById("ms-modal-overlay")) closeMsModal(); }
 
-function saveMilestone() {
+async function saveMilestone() {
   const title = document.getElementById("ms-edit-title").value.trim();
   if (!title) { toast("請輸入里程碑名稱", true); return; }
-  const goal = allGoals.find(g => g.goal_id === editingMsGoalId);
-  if (!goal) return;
-  const ms = (goal.milestones || []).find(m => m.milestone_id === editingMsId);
-  if (!ms) return;
-  ms.title = title;
-  lsSave(allGoals);
-  toast("里程碑已更新！");
-  closeMsModal();
-  renderGoals();
-  expandedGoals.add(editingMsGoalId);
-  const el = document.getElementById("goal-" + editingMsGoalId);
-  if (el) el.classList.add("open");
+  const btn = document.getElementById("ms-save-btn");
+  btn.disabled = true;
+  btn.textContent = "儲存中…";
+  try {
+    await api({ action: "updateMilestone", milestone_id: editingMsId, title });
+    toast("里程碑已更新！");
+    closeMsModal();
+    await loadGoals();
+    expandedGoals.add(editingMsGoalId);
+    const el = document.getElementById("goal-" + editingMsGoalId);
+    if (el) el.classList.add("open");
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "儲存";
+  }
 }
 
 // ── 刪除里程碑 ─────────────────────────────────────────────
@@ -551,14 +517,17 @@ function confirmDeleteMs(goalId, msId) {
   if (!goal) return;
   const ms = (goal.milestones || []).find(m => m.milestone_id === msId);
   if (!ms) return;
-  showConfirm(`確定要刪除里程碑「${ms.title}」嗎？`, () => {
-    goal.milestones = goal.milestones.filter(m => m.milestone_id !== msId);
-    lsSave(allGoals);
-    toast("里程碑已刪除");
-    renderGoals();
-    expandedGoals.add(goalId);
-    const el = document.getElementById("goal-" + goalId);
-    if (el) el.classList.add("open");
+  showConfirm(`確定要刪除里程碑「${ms.title}」嗎？`, async () => {
+    try {
+      await api({ action: "deleteMilestone", milestone_id: msId });
+      toast("里程碑已刪除");
+      await loadGoals();
+      expandedGoals.add(goalId);
+      const el = document.getElementById("goal-" + goalId);
+      if (el) el.classList.add("open");
+    } catch (e) {
+      toast(e.message, true);
+    }
   });
 }
 
@@ -580,7 +549,7 @@ function closeConfirm() {
 
 // ── helpers ────────────────────────────────────────────────
 function esc(s) {
-  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 let toastTimer;
 function toast(msg, isErr = false) {
