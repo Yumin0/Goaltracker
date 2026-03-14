@@ -8,6 +8,7 @@
 const TOKEN       = "goaltracker2026";
 const GOALS_SHEET = "Goals";
 const MS_SHEET    = "Milestones";
+const CAT_SHEET   = "Categories";
 
 // ── 主入口 ─────────────────────────────────────────────────
 function doGet(e) {
@@ -17,14 +18,18 @@ function doGet(e) {
 
     const action = e.parameter.action;
     switch (action) {
-      case "getGoals":        return jsonResp(getGoals());
-      case "createGoal":      return jsonResp(createGoal(e.parameter));
-      case "updateGoal":      return jsonResp(updateGoal(e.parameter));
-      case "deleteGoal":      return jsonResp(deleteGoal(e.parameter));
-      case "createMilestone": return jsonResp(createMilestone(e.parameter));
-      case "updateMilestone": return jsonResp(updateMilestone(e.parameter));
-      case "deleteMilestone": return jsonResp(deleteMilestone(e.parameter));
-      case "toggleMilestone": return jsonResp(toggleMilestone(e.parameter));
+      case "getGoals":         return jsonResp(getGoals());
+      case "createGoal":       return jsonResp(createGoal(e.parameter));
+      case "updateGoal":       return jsonResp(updateGoal(e.parameter));
+      case "deleteGoal":       return jsonResp(deleteGoal(e.parameter));
+      case "createMilestone":  return jsonResp(createMilestone(e.parameter));
+      case "updateMilestone":  return jsonResp(updateMilestone(e.parameter));
+      case "deleteMilestone":  return jsonResp(deleteMilestone(e.parameter));
+      case "toggleMilestone":  return jsonResp(toggleMilestone(e.parameter));
+      case "getCategories":    return jsonResp(getCategories());
+      case "createCategory":   return jsonResp(createCategory(e.parameter));
+      case "updateCategory":   return jsonResp(updateCategory(e.parameter));
+      case "deleteCategory":   return jsonResp(deleteCategory(e.parameter));
       default: return jsonResp({ success: false, error: "Unknown action: " + action });
     }
   } catch (err) {
@@ -48,6 +53,11 @@ function getSheet(name) {
       sheet.appendRow(["goal_id", "title", "category", "target_date", "description", "status", "created_at"]);
     } else if (name === MS_SHEET) {
       sheet.appendRow(["milestone_id", "goal_id", "title", "status", "completed_at", "created_at"]);
+    } else if (name === CAT_SHEET) {
+      sheet.appendRow(["category_id", "name", "icon", "color", "created_at"]);
+      const now = new Date().toISOString().slice(0, 10);
+      sheet.appendRow(["work", "工作", "💼", "purple", now]);
+      sheet.appendRow(["life", "生活", "🌿", "green",  now]);
     }
   }
   return sheet;
@@ -281,4 +291,69 @@ function toggleMilestone(p) {
     success: false,
     error: `找不到里程碑 (尋找: "${p.milestone_id}"，前幾筆ID: ${sampleIds.join(", ")})`
   };
+}
+
+// ── getCategories ──────────────────────────────────────────
+function getCategories() {
+  const sheet = getSheet(CAT_SHEET);
+  const data  = sheet.getDataRange().getValues();
+  const cats  = rowsToObjects(data);
+  return {
+    success: true,
+    data: cats.map(c => ({
+      category_id: String(c.category_id || ""),
+      name:        c.name  || "",
+      icon:        c.icon  || "",
+      color:       c.color || "purple",
+      created_at:  c.created_at ? String(c.created_at).slice(0, 10) : ""
+    }))
+  };
+}
+
+// ── createCategory ─────────────────────────────────────────
+function createCategory(p) {
+  if (!p.name) return { success: false, error: "缺少類別名稱" };
+  const sheet = getSheet(CAT_SHEET);
+  const id    = genId("cat");
+  const now   = new Date().toISOString().slice(0, 10);
+  sheet.appendRow([id, p.name, p.icon || "📌", p.color || "purple", now]);
+  return { success: true, category_id: id };
+}
+
+// ── updateCategory ─────────────────────────────────────────
+function updateCategory(p) {
+  if (!p.category_id) return { success: false, error: "缺少 category_id" };
+  const sheet = getSheet(CAT_SHEET);
+  const data  = sheet.getDataRange().getValues();
+  const col   = buildColMap(data[0]);
+  const idCol = col["category_id"];
+  if (idCol === undefined) return { success: false, error: "找不到 category_id 欄位" };
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idCol]) === String(p.category_id)) {
+      if (p.name  !== undefined && col["name"]  !== undefined) sheet.getRange(i+1, col["name"]+1).setValue(p.name);
+      if (p.icon  !== undefined && col["icon"]  !== undefined) sheet.getRange(i+1, col["icon"]+1).setValue(p.icon);
+      if (p.color !== undefined && col["color"] !== undefined) sheet.getRange(i+1, col["color"]+1).setValue(p.color);
+      return { success: true };
+    }
+  }
+  return { success: false, error: "找不到類別" };
+}
+
+// ── deleteCategory ─────────────────────────────────────────
+function deleteCategory(p) {
+  if (!p.category_id) return { success: false, error: "缺少 category_id" };
+  const sheet = getSheet(CAT_SHEET);
+  const data  = sheet.getDataRange().getValues();
+  const col   = buildColMap(data[0]);
+  const idCol = col["category_id"];
+  if (idCol === undefined) return { success: false, error: "找不到 category_id 欄位" };
+
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][idCol]) === String(p.category_id)) {
+      sheet.deleteRow(i + 1);
+      return { success: true };
+    }
+  }
+  return { success: false, error: "找不到類別" };
 }
