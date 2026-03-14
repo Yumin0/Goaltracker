@@ -101,29 +101,11 @@
 
 <header>
   <h1>🎯 Goal Tracker</h1>
-  <button onclick="toggleConfig()" style="font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer;color:#888">⚙️</button>
 </header>
 
 <main>
 
-  <!-- ① 設定 API URL（第一次使用） -->
-  <div class="card" id="config-card" style="display:none">
-    <h2>⚙️ API 設定</h2>
-    <div class="form-row">
-      <label>Apps Script 部署網址</label>
-      <input id="api-url" type="url" placeholder="https://script.google.com/macros/s/xxx/exec">
-    </div>
-    <div class="form-row">
-      <label>Token 密碼</label>
-      <input id="api-token" type="text" value="goaltracker2026">
-    </div>
-    <div class="btn-row">
-      <button class="primary" onclick="saveConfig()">儲存並測試連線</button>
-      <button onclick="toggleConfig()">收起</button>
-    </div>
-  </div>
-
-  <!-- ② 新增目標 -->
+  <!-- ① 新增目標 -->
   <div class="card">
     <h2>➕ 新增目標</h2>
     <div class="form-row">
@@ -169,38 +151,15 @@
 
 <script>
 // ── state ──────────────────────────────────────────────────
-let API_URL   = localStorage.getItem("gt_url")   || "https://script.google.com/macros/s/AKfycbwq9Q7f4XFF0LmsdTgx65eM4V32jAic4ReAIn-CVBmwMEUW4gRXDi1jB1uXovQ-2AgYZA/exec";
-let API_TOKEN = localStorage.getItem("gt_token") || "goaltracker2026";
+const API_URL   = "https://script.google.com/macros/s/AKfycbwq9Q7f4XFF0LmsdTgx65eM4V32jAic4ReAIn-CVBmwMEUW4gRXDi1jB1uXovQ-2AgYZA/exec";
+const API_TOKEN = "goaltracker2026";
 let allGoals  = [];
 let activeTab = "all";
 
 // ── init ───────────────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("api-url").value   = API_URL;
-  document.getElementById("api-token").value = API_TOKEN;
-  if (API_URL) {
-    loadGoals();
-  } else {
-    document.getElementById("config-card").style.display = "block";
-    document.getElementById("goals-list").innerHTML = '<div class="empty">請先點右上角 ⚙️ 設定 API 網址</div>';
-  }
+  loadGoals();
 });
-
-// ── config ─────────────────────────────────────────────────
-function toggleConfig() {
-  const card = document.getElementById("config-card");
-  card.style.display = card.style.display === "none" ? "block" : "none";
-}
-
-async function saveConfig() {
-  API_URL   = document.getElementById("api-url").value.trim();
-  API_TOKEN = document.getElementById("api-token").value.trim();
-  localStorage.setItem("gt_url",   API_URL);
-  localStorage.setItem("gt_token", API_TOKEN);
-  setStatus("連線中…", null);
-  await loadGoals();
-  document.getElementById("config-card").style.display = "none";
-}
 
 // ── API call ───────────────────────────────────────────────
 async function api(params) {
@@ -222,7 +181,7 @@ async function loadGoals() {
     renderGoals();
   } catch (e) {
     toast("連線失敗：" + e.message, true);
-    document.getElementById("goals-list").innerHTML = `<div class="empty">❌ ${e.message}<br><small>請點右上角 ⚙️ 確認 API 設定</small></div>`;
+    document.getElementById("goals-list").innerHTML = `<div class="empty">❌ ${e.message}</div>`;
   }
 }
 
