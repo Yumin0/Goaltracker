@@ -45,16 +45,29 @@
   .goal-detail { display: none; margin-top: 12px; border-top: 1px solid #f0f0f0; padding-top: 10px; }
   .goal-item.open .goal-detail { display: block; }
 
+  /* goal action buttons */
+  .goal-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .btn-icon { padding: 5px 10px; font-size: 12px; border-radius: 6px; border: 1px solid #e5e5e5;
+              background: #fff; cursor: pointer; color: #666; }
+  .btn-icon:hover { background: #f5f5f5; }
+  .btn-icon.danger { color: #a32d2d; border-color: #f5c6c6; }
+  .btn-icon.danger:hover { background: #fff0f0; }
+
   /* milestones */
-  .ms-item { display: flex; align-items: center; gap: 10px; padding: 7px 0;
+  .ms-item { display: flex; align-items: center; gap: 8px; padding: 7px 0;
              border-bottom: 1px solid #f8f8f8; font-size: 14px; }
   .ms-item:last-child { border-bottom: none; }
   .ms-item input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; accent-color: #534ab7; }
   .ms-title { flex: 1; }
   .ms-title.done { text-decoration: line-through; color: #aaa; }
   .ms-date { font-size: 11px; color: #aaa; }
+  .ms-btn { padding: 3px 8px; font-size: 11px; border-radius: 5px; border: 1px solid #e5e5e5;
+            background: #fff; cursor: pointer; color: #666; flex-shrink: 0; }
+  .ms-btn:hover { background: #f5f5f5; }
+  .ms-btn.danger { color: #a32d2d; border-color: #f5c6c6; }
+  .ms-btn.danger:hover { background: #fff0f0; }
 
-  /* inline add milestone */
+  /* inline add/edit milestone */
   .ms-add { display: flex; gap: 8px; margin-top: 10px; }
   .ms-add input { flex: 1; padding: 7px 10px; font-size: 13px; }
   .ms-add button { padding: 7px 14px; font-size: 13px; flex-shrink: 0; }
@@ -119,6 +132,21 @@
   #toast.show { transform: translateX(-50%) translateY(0); }
   #toast.err   { background: #a32d2d; }
 
+  /* ── confirm dialog ── */
+  .confirm-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 60; padding: 20px;
+    opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .confirm-overlay.open { opacity: 1; pointer-events: auto; }
+  .confirm-box {
+    background: #fff; border-radius: 14px; padding: 24px;
+    width: 100%; max-width: 360px; text-align: center;
+    transform: translateY(20px); transition: transform .2s; }
+  .confirm-overlay.open .confirm-box { transform: translateY(0); }
+  .confirm-box p { font-size: 15px; margin-bottom: 18px; line-height: 1.5; }
+  .confirm-box .btn-row { justify-content: center; }
+
   /* ── empty state ── */
   .empty { text-align: center; color: #bbb; padding: 32px 0; font-size: 14px; }
 
@@ -147,13 +175,13 @@
 </main>
 
 <!-- 右下角新增按鈕 -->
-<button class="fab" onclick="openModal()" title="新增目標">＋</button>
+<button class="fab" onclick="openGoalModal()" title="新增目標">＋</button>
 
-<!-- 新增目標 Modal -->
+<!-- 新增 / 編輯目標 Modal -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalOverlay(event)">
   <div class="modal">
     <div class="modal-header">
-      <h2>➕ 新增目標</h2>
+      <h2 id="modal-title">➕ 新增目標</h2>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="form-row">
@@ -178,8 +206,37 @@
       <textarea id="g-desc" placeholder="目標背景或細節…"></textarea>
     </div>
     <div class="btn-row">
-      <button class="primary" id="create-btn" onclick="createGoal()">新增目標</button>
+      <button class="primary" id="save-btn" onclick="saveGoal()">新增目標</button>
       <button onclick="closeModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 編輯里程碑 Modal -->
+<div class="modal-overlay" id="ms-modal-overlay" onclick="closeMsModalOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>✏️ 編輯里程碑</h2>
+      <button class="modal-close" onclick="closeMsModal()">✕</button>
+    </div>
+    <div class="form-row">
+      <label>里程碑名稱 *</label>
+      <input id="ms-edit-title" type="text" placeholder="里程碑名稱">
+    </div>
+    <div class="btn-row">
+      <button class="primary" id="ms-save-btn" onclick="saveMilestone()">儲存</button>
+      <button onclick="closeMsModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 確認刪除對話框 -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <p id="confirm-msg">確定要刪除嗎？</p>
+    <div class="btn-row">
+      <button class="primary" style="background:#a32d2d;border-color:#a32d2d" id="confirm-ok">確認刪除</button>
+      <button onclick="closeConfirm()">取消</button>
     </div>
   </div>
 </div>
@@ -187,11 +244,17 @@
 <div id="toast"></div>
 
 <script>
-// ── state ──────────────────────────────────────────────────
+// ── 設定 ──────────────────────────────────────────────────
 const API_URL   = "https://script.google.com/macros/s/AKfycbwq9Q7f4XFF0LmsdTgx65eM4V32jAic4ReAIn-CVBmwMEUW4gRXDi1jB1uXovQ-2AgYZA/exec";
 const API_TOKEN = "goaltracker2026";
-let allGoals    = [];
-let activeTab   = "all";
+const LS_KEY    = "goaltracker_data";
+
+// ── state ──────────────────────────────────────────────────
+let allGoals      = [];
+let activeTab     = "all";
+let editingGoalId = null;   // null = 新增, 否則為編輯中的 goal_id
+let editingMsId   = null;   // 編輯中的 milestone_id
+let editingMsGoalId = null; // 編輯里程碑所屬的 goal_id
 const expandedGoals = new Set();
 
 // ── init ───────────────────────────────────────────────────
@@ -199,40 +262,48 @@ window.addEventListener("DOMContentLoaded", () => {
   loadGoals();
 });
 
-// ── modal ──────────────────────────────────────────────────
-function openModal() {
-  document.getElementById("modal-overlay").classList.add("open");
-  setTimeout(() => document.getElementById("g-title").focus(), 50);
+// ── localStorage helpers ───────────────────────────────────
+function lsLoad() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || null; } catch { return null; }
 }
-function closeModal() {
-  document.getElementById("modal-overlay").classList.remove("open");
+function lsSave(data) {
+  localStorage.setItem(LS_KEY, JSON.stringify(data));
 }
-function closeModalOverlay(e) {
-  if (e.target === document.getElementById("modal-overlay")) closeModal();
+function genId(prefix) {
+  return prefix + "_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
 }
-document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
 
-// ── API call ───────────────────────────────────────────────
-async function api(params) {
-  if (!API_URL) { toast("請先設定 API 網址", true); throw new Error("No API URL"); }
+// ── API call（只用於初次載入） ──────────────────────────────
+async function fetchFromApi() {
   const url = new URL(API_URL);
   url.searchParams.set("token", API_TOKEN);
-  Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== "") url.searchParams.set(k, v); });
+  url.searchParams.set("action", "getGoals");
   const res  = await fetch(url.toString());
   const data = await res.json();
   if (!data.success) throw new Error(data.error || "API error");
-  return data;
+  return data.data;
 }
 
 // ── load goals ─────────────────────────────────────────────
 async function loadGoals() {
+  const cached = lsLoad();
+  if (cached) {
+    allGoals = cached;
+    renderGoals();
+    return;
+  }
+  // 首次載入：嘗試從 API 同步資料
   try {
-    const data = await api({ action: "getGoals" });
-    allGoals = data.data;
+    const data = await fetchFromApi();
+    allGoals = data;
+    lsSave(allGoals);
     renderGoals();
   } catch (e) {
-    toast("連線失敗：" + e.message, true);
-    document.getElementById("goals-list").innerHTML = `<div class="empty">❌ ${e.message}</div>`;
+    // API 不可用時，從空白開始
+    allGoals = [];
+    lsSave(allGoals);
+    renderGoals();
+    toast("無法連線 API，以本機模式運作", true);
   }
 }
 
@@ -263,17 +334,19 @@ function renderGoals() {
   if (!goals.length) { list.innerHTML = '<div class="empty">目前沒有進行中的目標</div>'; return; }
 
   list.innerHTML = goals.map(g => {
-    const total  = g.milestones.length;
-    const done   = g.milestones.filter(m => m.status === "done").length;
+    const total  = (g.milestones || []).length;
+    const done   = (g.milestones || []).filter(m => m.status === "done").length;
     const pct    = total ? Math.round(done / total * 100) : 0;
     const isLife = g.category === "life";
     const isOpen = expandedGoals.has(g.goal_id);
 
-    const msHtml = g.milestones.map(m => `
+    const msHtml = (g.milestones || []).map(m => `
       <div class="ms-item">
-        <input type="checkbox" ${m.status==="done"?"checked":""} onchange="toggleMs('${m.milestone_id}', this)">
+        <input type="checkbox" ${m.status==="done"?"checked":""} onchange="toggleMs('${g.goal_id}','${m.milestone_id}', this)">
         <span class="ms-title ${m.status==="done"?"done":""}">${esc(m.title)}</span>
-        ${m.completed_at ? `<span class="ms-date">${m.completed_at.slice(5,10)}</span>` : ""}
+        ${m.completed_at ? `<span class="ms-date">${String(m.completed_at).slice(5,10)}</span>` : ""}
+        <button class="ms-btn" onclick="openMsEditModal('${g.goal_id}','${m.milestone_id}')">編輯</button>
+        <button class="ms-btn danger" onclick="confirmDeleteMs('${g.goal_id}','${m.milestone_id}')">刪除</button>
       </div>`).join("");
 
     return `
@@ -294,68 +367,215 @@ function renderGoals() {
           <input type="text" placeholder="新增里程碑…" id="ms-input-${g.goal_id}" onkeydown="if(event.key==='Enter')addMs('${g.goal_id}')">
           <button class="small primary" onclick="addMs('${g.goal_id}')">+新增</button>
         </div>
+        <div class="goal-actions">
+          <button class="btn-icon" onclick="openGoalEditModal('${g.goal_id}')">✏️ 編輯目標</button>
+          <button class="btn-icon danger" onclick="confirmDeleteGoal('${g.goal_id}')">🗑️ 刪除目標</button>
+        </div>
       </div>
     </div>`;
   }).join("");
 }
 
-// ── create goal ────────────────────────────────────────────
-async function createGoal() {
-  const title = document.getElementById("g-title").value.trim();
-  if (!title) { toast("請輸入目標名稱", true); return; }
-  const btn = document.getElementById("create-btn");
-  btn.disabled = true; btn.textContent = "新增中…";
-  try {
-    await api({
-      action: "createGoal",
-      title,
-      category:    document.getElementById("g-category").value,
-      target_date: document.getElementById("g-date").value,
-      description: document.getElementById("g-desc").value.trim()
-    });
-    document.getElementById("g-title").value = "";
-    document.getElementById("g-date").value  = "";
-    document.getElementById("g-desc").value  = "";
-    toast("目標已新增！");
-    closeModal();
-    await loadGoals();
-  } catch (e) {
-    toast(e.message, true);
-  } finally {
-    btn.disabled = false; btn.textContent = "新增目標";
-  }
+// ── 目標 Modal (新增 / 編輯) ────────────────────────────────
+function openGoalModal() {
+  editingGoalId = null;
+  document.getElementById("modal-title").textContent = "➕ 新增目標";
+  document.getElementById("save-btn").textContent = "新增目標";
+  document.getElementById("g-title").value = "";
+  document.getElementById("g-category").value = "work";
+  document.getElementById("g-date").value = "";
+  document.getElementById("g-desc").value = "";
+  document.getElementById("modal-overlay").classList.add("open");
+  setTimeout(() => document.getElementById("g-title").focus(), 50);
 }
 
-// ── add milestone ──────────────────────────────────────────
-async function addMs(goalId) {
+function openGoalEditModal(goalId) {
+  const goal = allGoals.find(g => g.goal_id === goalId);
+  if (!goal) return;
+  editingGoalId = goalId;
+  document.getElementById("modal-title").textContent = "✏️ 編輯目標";
+  document.getElementById("save-btn").textContent = "儲存修改";
+  document.getElementById("g-title").value = goal.title || "";
+  document.getElementById("g-category").value = goal.category || "work";
+  document.getElementById("g-date").value = goal.target_date || "";
+  document.getElementById("g-desc").value = goal.description || "";
+  document.getElementById("modal-overlay").classList.add("open");
+  setTimeout(() => document.getElementById("g-title").focus(), 50);
+}
+
+function closeModal() {
+  document.getElementById("modal-overlay").classList.remove("open");
+}
+function closeModalOverlay(e) {
+  if (e.target === document.getElementById("modal-overlay")) closeModal();
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); closeMsModal(); } });
+
+// ── 儲存目標（新增或編輯）────────────────────────────────────
+function saveGoal() {
+  const title = document.getElementById("g-title").value.trim();
+  if (!title) { toast("請輸入目標名稱", true); return; }
+  const btn = document.getElementById("save-btn");
+  btn.disabled = true;
+
+  const category    = document.getElementById("g-category").value;
+  const target_date = document.getElementById("g-date").value;
+  const description = document.getElementById("g-desc").value.trim();
+
+  if (editingGoalId) {
+    // 編輯現有目標
+    const goal = allGoals.find(g => g.goal_id === editingGoalId);
+    if (goal) {
+      goal.title       = title;
+      goal.category    = category;
+      goal.target_date = target_date;
+      goal.description = description;
+    }
+    lsSave(allGoals);
+    toast("目標已更新！");
+  } else {
+    // 新增目標
+    const newGoal = {
+      goal_id:     genId("g"),
+      title,
+      category,
+      target_date,
+      description,
+      status:      "active",
+      milestones:  []
+    };
+    allGoals.push(newGoal);
+    lsSave(allGoals);
+    toast("目標已新增！");
+  }
+
+  btn.disabled = false;
+  closeModal();
+  renderGoals();
+}
+
+// ── 刪除目標 ───────────────────────────────────────────────
+function confirmDeleteGoal(goalId) {
+  const goal = allGoals.find(g => g.goal_id === goalId);
+  if (!goal) return;
+  showConfirm(`確定要刪除目標「${goal.title}」嗎？\n此操作無法復原。`, () => {
+    allGoals = allGoals.filter(g => g.goal_id !== goalId);
+    lsSave(allGoals);
+    expandedGoals.delete(goalId);
+    toast("目標已刪除");
+    renderGoals();
+  });
+}
+
+// ── 新增里程碑 ─────────────────────────────────────────────
+function addMs(goalId) {
   const input = document.getElementById("ms-input-" + goalId);
   const title = input.value.trim();
   if (!title) return;
-  input.disabled = true;
-  try {
-    await api({ action: "createMilestone", goal_id: goalId, title });
-    input.value = "";
-    toast("里程碑已新增！");
-    await loadGoals();
-  } catch (e) {
-    toast(e.message, true);
-  } finally {
-    input.disabled = false; input.focus();
-  }
+  const goal = allGoals.find(g => g.goal_id === goalId);
+  if (!goal) return;
+  if (!goal.milestones) goal.milestones = [];
+  goal.milestones.push({
+    milestone_id: genId("m"),
+    goal_id:      goalId,
+    title,
+    status:       "pending",
+    completed_at: null
+  });
+  lsSave(allGoals);
+  input.value = "";
+  toast("里程碑已新增！");
+  renderGoals();
+  // 保持展開狀態
+  expandedGoals.add(goalId);
+  const el = document.getElementById("goal-" + goalId);
+  if (el) el.classList.add("open");
 }
 
-// ── toggle milestone ───────────────────────────────────────
-async function toggleMs(msId, checkbox) {
-  checkbox.disabled = true;
-  try {
-    await api({ action: "toggleMilestone", milestone_id: msId });
-    await loadGoals();
-  } catch (e) {
-    toast(e.message, true);
-    checkbox.checked = !checkbox.checked;
-  } finally {
-    checkbox.disabled = false;
-  }
+// ── 切換里程碑完成狀態 ─────────────────────────────────────
+function toggleMs(goalId, msId, checkbox) {
+  const goal = allGoals.find(g => g.goal_id === goalId);
+  if (!goal) return;
+  const ms = (goal.milestones || []).find(m => m.milestone_id === msId);
+  if (!ms) return;
+  ms.status = checkbox.checked ? "done" : "pending";
+  ms.completed_at = checkbox.checked ? new Date().toISOString().slice(0, 10) : null;
+  lsSave(allGoals);
+  renderGoals();
+  // 保持展開狀態
+  expandedGoals.add(goalId);
+  const el = document.getElementById("goal-" + goalId);
+  if (el) el.classList.add("open");
+}
+
+// ── 里程碑 編輯 Modal ──────────────────────────────────────
+function openMsEditModal(goalId, msId) {
+  const goal = allGoals.find(g => g.goal_id === goalId);
+  if (!goal) return;
+  const ms = (goal.milestones || []).find(m => m.milestone_id === msId);
+  if (!ms) return;
+  editingMsId     = msId;
+  editingMsGoalId = goalId;
+  document.getElementById("ms-edit-title").value = ms.title || "";
+  document.getElementById("ms-modal-overlay").classList.add("open");
+  setTimeout(() => document.getElementById("ms-edit-title").focus(), 50);
+}
+
+function closeMsModal() {
+  document.getElementById("ms-modal-overlay").classList.remove("open");
+}
+function closeMsModalOverlay(e) {
+  if (e.target === document.getElementById("ms-modal-overlay")) closeMsModal();
+}
+
+function saveMilestone() {
+  const title = document.getElementById("ms-edit-title").value.trim();
+  if (!title) { toast("請輸入里程碑名稱", true); return; }
+  const goal = allGoals.find(g => g.goal_id === editingMsGoalId);
+  if (!goal) return;
+  const ms = (goal.milestones || []).find(m => m.milestone_id === editingMsId);
+  if (!ms) return;
+  ms.title = title;
+  lsSave(allGoals);
+  toast("里程碑已更新！");
+  closeMsModal();
+  renderGoals();
+  expandedGoals.add(editingMsGoalId);
+  const el = document.getElementById("goal-" + editingMsGoalId);
+  if (el) el.classList.add("open");
+}
+
+// ── 刪除里程碑 ─────────────────────────────────────────────
+function confirmDeleteMs(goalId, msId) {
+  const goal = allGoals.find(g => g.goal_id === goalId);
+  if (!goal) return;
+  const ms = (goal.milestones || []).find(m => m.milestone_id === msId);
+  if (!ms) return;
+  showConfirm(`確定要刪除里程碑「${ms.title}」嗎？`, () => {
+    goal.milestones = goal.milestones.filter(m => m.milestone_id !== msId);
+    lsSave(allGoals);
+    toast("里程碑已刪除");
+    renderGoals();
+    expandedGoals.add(goalId);
+    const el = document.getElementById("goal-" + goalId);
+    if (el) el.classList.add("open");
+  });
+}
+
+// ── 確認對話框 ─────────────────────────────────────────────
+let confirmCallback = null;
+function showConfirm(msg, cb) {
+  document.getElementById("confirm-msg").textContent = msg;
+  confirmCallback = cb;
+  document.getElementById("confirm-overlay").classList.add("open");
+  document.getElementById("confirm-ok").onclick = () => {
+    closeConfirm();
+    if (confirmCallback) confirmCallback();
+  };
+}
+function closeConfirm() {
+  document.getElementById("confirm-overlay").classList.remove("open");
+  confirmCallback = null;
 }
 
 // ── helpers ────────────────────────────────────────────────
