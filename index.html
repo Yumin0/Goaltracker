@@ -37,8 +37,15 @@
   .progress-bar.life { background: #1d9e75; }
   .progress-label { font-size: 12px; color: #888; }
 
+  /* ── collapsible goal ── */
+  .goal-summary { cursor: pointer; user-select: none; }
+  .goal-summary:hover .goal-title { text-decoration: underline; text-decoration-color: #ccc; }
+  .goal-chevron { font-size: 11px; color: #bbb; margin-left: 4px; transition: transform .2s; display: inline-block; }
+  .goal-item.open .goal-chevron { transform: rotate(90deg); }
+  .goal-detail { display: none; margin-top: 12px; border-top: 1px solid #f0f0f0; padding-top: 10px; }
+  .goal-item.open .goal-detail { display: block; }
+
   /* milestones */
-  .ms-list { margin-top: 12px; border-top: 1px solid #f0f0f0; padding-top: 10px; }
   .ms-item { display: flex; align-items: center; gap: 10px; padding: 7px 0;
              border-bottom: 1px solid #f8f8f8; font-size: 14px; }
   .ms-item:last-child { border-bottom: none; }
@@ -183,8 +190,9 @@
 // ── state ──────────────────────────────────────────────────
 const API_URL   = "https://script.google.com/macros/s/AKfycbwq9Q7f4XFF0LmsdTgx65eM4V32jAic4ReAIn-CVBmwMEUW4gRXDi1jB1uXovQ-2AgYZA/exec";
 const API_TOKEN = "goaltracker2026";
-let allGoals  = [];
-let activeTab = "all";
+let allGoals    = [];
+let activeTab   = "all";
+const expandedGoals = new Set();
 
 // ── init ───────────────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", () => {
@@ -236,6 +244,18 @@ function setTab(tab, el) {
   renderGoals();
 }
 
+function toggleGoal(goalId) {
+  const el = document.getElementById("goal-" + goalId);
+  if (!el) return;
+  if (expandedGoals.has(goalId)) {
+    expandedGoals.delete(goalId);
+    el.classList.remove("open");
+  } else {
+    expandedGoals.add(goalId);
+    el.classList.add("open");
+  }
+}
+
 function renderGoals() {
   const list = document.getElementById("goals-list");
   let goals  = allGoals.filter(g => g.status !== "done" && g.status !== "archived");
@@ -243,10 +263,11 @@ function renderGoals() {
   if (!goals.length) { list.innerHTML = '<div class="empty">目前沒有進行中的目標</div>'; return; }
 
   list.innerHTML = goals.map(g => {
-    const total = g.milestones.length;
-    const done  = g.milestones.filter(m => m.status === "done").length;
-    const pct   = total ? Math.round(done / total * 100) : 0;
+    const total  = g.milestones.length;
+    const done   = g.milestones.filter(m => m.status === "done").length;
+    const pct    = total ? Math.round(done / total * 100) : 0;
     const isLife = g.category === "life";
+    const isOpen = expandedGoals.has(g.goal_id);
 
     const msHtml = g.milestones.map(m => `
       <div class="ms-item">
@@ -256,18 +277,23 @@ function renderGoals() {
       </div>`).join("");
 
     return `
-    <div class="goal-item" id="goal-${g.goal_id}">
-      <div class="goal-header">
-        <span class="badge ${g.category}">${isLife?"🌿 生活":"💼 工作"}</span>
-        <span class="goal-title">${esc(g.title)}</span>
+    <div class="goal-item${isOpen?" open":""}" id="goal-${g.goal_id}">
+      <div class="goal-summary" onclick="toggleGoal('${g.goal_id}')">
+        <div class="goal-header">
+          <span class="badge ${g.category}">${isLife?"🌿 生活":"💼 工作"}</span>
+          <span class="goal-title">${esc(g.title)}</span>
+          <span class="goal-chevron">▶</span>
+        </div>
+        <div class="goal-meta">${g.target_date ? "截止 " + g.target_date : "無截止日"} · ${done}/${total} 里程碑</div>
+        <div class="progress-wrap"><div class="progress-bar ${isLife?"life":""}" style="width:${pct}%"></div></div>
+        <div class="progress-label">${pct}%</div>
       </div>
-      <div class="goal-meta">${g.target_date ? "截止 " + g.target_date : "無截止日"} · ${done}/${total} 里程碑</div>
-      <div class="progress-wrap"><div class="progress-bar ${isLife?"life":""}" style="width:${pct}%"></div></div>
-      <div class="progress-label">${pct}%</div>
-      ${total ? `<div class="ms-list">${msHtml}</div>` : ""}
-      <div class="ms-add">
-        <input type="text" placeholder="新增里程碑…" id="ms-input-${g.goal_id}" onkeydown="if(event.key==='Enter')addMs('${g.goal_id}')">
-        <button class="small primary" onclick="addMs('${g.goal_id}')">+新增</button>
+      <div class="goal-detail">
+        ${msHtml}
+        <div class="ms-add">
+          <input type="text" placeholder="新增里程碑…" id="ms-input-${g.goal_id}" onkeydown="if(event.key==='Enter')addMs('${g.goal_id}')">
+          <button class="small primary" onclick="addMs('${g.goal_id}')">+新增</button>
+        </div>
       </div>
     </div>`;
   }).join("");
