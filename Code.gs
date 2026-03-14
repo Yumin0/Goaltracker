@@ -12,7 +12,6 @@ const MS_SHEET    = "Milestones";
 // ── 主入口 ─────────────────────────────────────────────────
 function doGet(e) {
   try {
-    // CORS header
     if (!e || !e.parameter) return jsonResp({ success: false, error: "No parameters" });
     if (e.parameter.token !== TOKEN) return jsonResp({ success: false, error: "Unauthorized" });
 
@@ -58,7 +57,7 @@ function genId(prefix) {
   return prefix + "_" + new Date().getTime() + "_" + Math.random().toString(36).substr(2, 5);
 }
 
-// 將 sheet row 轉成 object
+// 將 sheet rows 轉成 object array
 function rowsToObjects(data) {
   if (data.length <= 1) return [];
   const headers = data[0];
@@ -69,39 +68,66 @@ function rowsToObjects(data) {
   });
 }
 
+// 解析欄位對應，同時支援舊欄位名稱
+function buildColMap(headers) {
+  const col = {};
+  headers.forEach((h, i) => { col[String(h).trim()] = i; });
+  return col;
+}
+
+// 找里程碑 ID 欄位（相容舊版可能叫 'id'）
+function getMsIdCol(col) {
+  if (col["milestone_id"] !== undefined) return col["milestone_id"];
+  if (col["id"] !== undefined) return col["id"];
+  return undefined;
+}
+
+// 找目標 ID 欄位（相容舊版可能叫 'id'）
+function getGoalIdCol(col) {
+  if (col["goal_id"] !== undefined) return col["goal_id"];
+  if (col["id"] !== undefined) return col["id"];
+  return undefined;
+}
+
 // ── getGoals ───────────────────────────────────────────────
 function getGoals() {
   const goalsSheet = getSheet(GOALS_SHEET);
   const msSheet    = getSheet(MS_SHEET);
 
-  const goals = rowsToObjects(goalsSheet.getDataRange().getValues())
-    .filter(g => g.status !== "deleted");
+  const goalsData = goalsSheet.getDataRange().getValues();
+  const msData    = msSheet.getDataRange().getValues();
 
-  const allMs = rowsToObjects(msSheet.getDataRange().getValues())
-    .filter(m => m.status !== "deleted");
+  const goals = rowsToObjects(goalsData).filter(g => g.status !== "deleted");
+  const allMs = rowsToObjects(msData).filter(m => m.status !== "deleted");
 
-  // 建立 milestones map（以 goal_id 為 key）
+  // 建立 milestones map（相容舊版 ID 欄位名稱）
   const msMap = {};
   allMs.forEach(m => {
-    if (!msMap[m.goal_id]) msMap[m.goal_id] = [];
-    msMap[m.goal_id].push({
-      milestone_id: String(m.milestone_id),
-      goal_id:      String(m.goal_id),
-      title:        m.title,
+    const msId   = String(m.milestone_id || m.id || "");
+    const goalId = String(m.goal_id || "");
+    if (!goalId) return;
+    if (!msMap[goalId]) msMap[goalId] = [];
+    msMap[goalId].push({
+      milestone_id: msId,
+      goal_id:      goalId,
+      title:        m.title || "",
       status:       m.status || "pending",
       completed_at: m.completed_at ? String(m.completed_at).slice(0, 10) : null
     });
   });
 
-  const result = goals.map(g => ({
-    goal_id:     String(g.goal_id),
-    title:       g.title,
-    category:    g.category || "work",
-    target_date: g.target_date ? String(g.target_date).slice(0, 10) : "",
-    description: g.description || "",
-    status:      g.status || "active",
-    milestones:  msMap[String(g.goal_id)] || []
-  }));
+  const result = goals.map(g => {
+    const goalId = String(g.goal_id || g.id || "");
+    return {
+      goal_id:     goalId,
+      title:       g.title || "",
+      category:    g.category || "work",
+      target_date: g.target_date ? String(g.target_date).slice(0, 10) : "",
+      description: g.description || "",
+      status:      g.status || "active",
+      milestones:  msMap[goalId] || []
+    };
+  });
 
   return { success: true, data: result };
 }
@@ -121,16 +147,16 @@ function updateGoal(p) {
   if (!p.goal_id) return { success: false, error: "缺少 goal_id" };
   const sheet   = getSheet(GOALS_SHEET);
   const data    = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const col     = {};
-  headers.forEach((h, i) => col[h] = i);
+  const col     = buildColMap(data[0]);
+  const idCol   = getGoalIdCol(col);
+  if (idCol === undefined) return { success: false, error: "找不到 goal_id 欄位" };
 
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][col.goal_id]) === String(p.goal_id)) {
-      if (p.title       !== undefined) sheet.getRange(i + 1, col.title + 1).setValue(p.title);
-      if (p.category    !== undefined) sheet.getRange(i + 1, col.category + 1).setValue(p.category);
-      if (p.target_date !== undefined) sheet.getRange(i + 1, col.target_date + 1).setValue(p.target_date);
-      if (p.description !== undefined) sheet.getRange(i + 1, col.description + 1).setValue(p.description);
+    if (String(data[i][idCol]) === String(p.goal_id)) {
+      if (p.title       !== undefined && col["title"]       !== undefined) sheet.getRange(i+1, col["title"]+1).setValue(p.title);
+      if (p.category    !== undefined && col["category"]    !== undefined) sheet.getRange(i+1, col["category"]+1).setValue(p.category);
+      if (p.target_date !== undefined && col["target_date"] !== undefined) sheet.getRange(i+1, col["target_date"]+1).setValue(p.target_date);
+      if (p.description !== undefined && col["description"] !== undefined) sheet.getRange(i+1, col["description"]+1).setValue(p.description);
       return { success: true };
     }
   }
@@ -142,12 +168,12 @@ function deleteGoal(p) {
   if (!p.goal_id) return { success: false, error: "缺少 goal_id" };
   const sheet   = getSheet(GOALS_SHEET);
   const data    = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const col     = {};
-  headers.forEach((h, i) => col[h] = i);
+  const col     = buildColMap(data[0]);
+  const idCol   = getGoalIdCol(col);
+  if (idCol === undefined) return { success: false, error: "找不到 goal_id 欄位" };
 
   for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][col.goal_id]) === String(p.goal_id)) {
+    if (String(data[i][idCol]) === String(p.goal_id)) {
       sheet.deleteRow(i + 1);
       _deleteMilestonesByGoal(p.goal_id);
       return { success: true };
@@ -159,13 +185,11 @@ function deleteGoal(p) {
 function _deleteMilestonesByGoal(goalId) {
   const sheet   = getSheet(MS_SHEET);
   const data    = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const col     = {};
-  headers.forEach((h, i) => col[h] = i);
+  const col     = buildColMap(data[0]);
+  const goalCol = col["goal_id"] !== undefined ? col["goal_id"] : col["goal"];
+  if (goalCol === undefined) return;
   for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][col.goal_id]) === String(goalId)) {
-      sheet.deleteRow(i + 1);
-    }
+    if (String(data[i][goalCol]) === String(goalId)) sheet.deleteRow(i + 1);
   }
 }
 
@@ -185,13 +209,15 @@ function updateMilestone(p) {
   if (!p.milestone_id) return { success: false, error: "缺少 milestone_id" };
   const sheet   = getSheet(MS_SHEET);
   const data    = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const col     = {};
-  headers.forEach((h, i) => col[h] = i);
+  const col     = buildColMap(data[0]);
+  const idCol   = getMsIdCol(col);
+  if (idCol === undefined) return { success: false, error: "找不到里程碑 ID 欄位" };
 
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][col.milestone_id]) === String(p.milestone_id)) {
-      if (p.title !== undefined) sheet.getRange(i + 1, col.title + 1).setValue(p.title);
+    if (String(data[i][idCol]) === String(p.milestone_id)) {
+      if (p.title !== undefined && col["title"] !== undefined) {
+        sheet.getRange(i + 1, col["title"] + 1).setValue(p.title);
+      }
       return { success: true };
     }
   }
@@ -203,12 +229,12 @@ function deleteMilestone(p) {
   if (!p.milestone_id) return { success: false, error: "缺少 milestone_id" };
   const sheet   = getSheet(MS_SHEET);
   const data    = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const col     = {};
-  headers.forEach((h, i) => col[h] = i);
+  const col     = buildColMap(data[0]);
+  const idCol   = getMsIdCol(col);
+  if (idCol === undefined) return { success: false, error: "找不到里程碑 ID 欄位" };
 
   for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][col.milestone_id]) === String(p.milestone_id)) {
+    if (String(data[i][idCol]) === String(p.milestone_id)) {
       sheet.deleteRow(i + 1);
       return { success: true };
     }
@@ -219,21 +245,40 @@ function deleteMilestone(p) {
 // ── toggleMilestone ────────────────────────────────────────
 function toggleMilestone(p) {
   if (!p.milestone_id) return { success: false, error: "缺少 milestone_id" };
+
   const sheet   = getSheet(MS_SHEET);
   const data    = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const col     = {};
-  headers.forEach((h, i) => col[h] = i);
+  const col     = buildColMap(data[0]);
+  const idCol   = getMsIdCol(col);
+
+  if (idCol === undefined) {
+    return { success: false, error: "找不到里程碑 ID 欄位，現有欄位：" + Object.keys(col).join(", ") };
+  }
+
+  const statusCol      = col["status"];
+  const completedAtCol = col["completed_at"];
+
+  if (statusCol === undefined) {
+    return { success: false, error: "找不到 status 欄位，現有欄位：" + Object.keys(col).join(", ") };
+  }
 
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][col.milestone_id]) === String(p.milestone_id)) {
-      const current    = data[i][col.status];
-      const newStatus  = current === "done" ? "pending" : "done";
+    if (String(data[i][idCol]) === String(p.milestone_id)) {
+      const current     = String(data[i][statusCol] || "").trim();
+      const newStatus   = current === "done" ? "pending" : "done";
       const completedAt = newStatus === "done" ? new Date().toISOString().slice(0, 10) : "";
-      sheet.getRange(i + 1, col.status + 1).setValue(newStatus);
-      sheet.getRange(i + 1, col.completed_at + 1).setValue(completedAt);
+      sheet.getRange(i + 1, statusCol + 1).setValue(newStatus);
+      if (completedAtCol !== undefined) {
+        sheet.getRange(i + 1, completedAtCol + 1).setValue(completedAt);
+      }
       return { success: true };
     }
   }
-  return { success: false, error: "找不到里程碑" };
+
+  // 回傳除錯資訊，幫助診斷 ID 不符合的問題
+  const sampleIds = data.slice(1, 4).map(row => String(data.length > 1 ? row[idCol] : ""));
+  return {
+    success: false,
+    error: `找不到里程碑 (尋找: "${p.milestone_id}"，前幾筆ID: ${sampleIds.join(", ")})`
+  };
 }
