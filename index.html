@@ -147,6 +147,22 @@
   .confirm-box p { font-size: 15px; margin-bottom: 18px; line-height: 1.5; }
   .confirm-box .btn-row { justify-content: center; }
 
+  /* ── summary bar ── */
+  .summary-card {
+    background: #fff; border: 1px solid #eee; border-radius: 12px;
+    padding: 16px 20px; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 20px; }
+  .summary-donut { position: relative; flex-shrink: 0; }
+  .summary-donut svg { display: block; }
+  .donut-track { fill: none; stroke: #f0f0f0; stroke-width: 3.8; }
+  .donut-fill  { fill: none; stroke: #534ab7; stroke-width: 3.8;
+                 stroke-linecap: round; transition: stroke-dasharray .4s; }
+  .donut-pct   { font-size: 7.5px; font-weight: 700; fill: #222; dominant-baseline: middle; text-anchor: middle; }
+  .summary-info { flex: 1; min-width: 0; }
+  .summary-title { font-size: 13px; color: #888; margin-bottom: 4px; }
+  .summary-nums  { font-size: 15px; font-weight: 600; color: #222; margin-bottom: 4px; }
+  .summary-week  { font-size: 12px; color: #1d9e75; }
+
   /* ── empty state ── */
   .empty { text-align: center; color: #bbb; padding: 32px 0; font-size: 14px; }
 
@@ -179,6 +195,7 @@
 </header>
 
 <main>
+  <div id="summary-bar"></div>
   <div class="tabs" id="tabs-container">
     <div class="empty" style="padding:4px 0;">載入中… <span class="spinner"></span></div>
   </div>
@@ -391,8 +408,54 @@ function toggleGoal(goalId) {
   }
 }
 
+// ── summary bar ────────────────────────────────────────────
+function renderSummary() {
+  const active      = allGoals.filter(g => g.status !== "done" && g.status !== "archived");
+  const allMs       = active.flatMap(g => g.milestones || []);
+  const totalMs     = allMs.length;
+  const doneMs      = allMs.filter(m => m.status === "done").length;
+  const pct         = totalMs ? Math.round(doneMs / totalMs * 100) : 0;
+
+  // milestones completed this week (Mon–today)
+  const today    = new Date();
+  const dayOfWk  = (today.getDay() + 6) % 7; // Mon=0 … Sun=6
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - dayOfWk);
+  weekStart.setHours(0, 0, 0, 0);
+  const weekDone = allMs.filter(m => {
+    if (m.status !== "done" || !m.completed_at) return false;
+    const d = new Date(m.completed_at);
+    return d >= weekStart && d <= today;
+  }).length;
+
+  // SVG donut: circumference ≈ 2π×15.9 ≈ 99.9 → use 100 as full
+  const dash = pct.toFixed(1);
+  const el   = document.getElementById("summary-bar");
+  if (!el) return;
+  el.innerHTML = `
+    <div class="summary-card">
+      <div class="summary-donut">
+        <svg viewBox="0 0 36 36" width="80" height="80">
+          <circle class="donut-track" cx="18" cy="18" r="15.9"/>
+          <circle class="donut-fill" cx="18" cy="18" r="15.9"
+            stroke-dasharray="${dash}, 100"
+            transform="rotate(-90 18 18)"/>
+          <text class="donut-pct" x="18" y="18">${pct}%</text>
+        </svg>
+      </div>
+      <div class="summary-info">
+        <div class="summary-title">整體完成度</div>
+        <div class="summary-nums">${active.length} 個目標・${totalMs} 個里程碑</div>
+        ${weekDone > 0
+          ? `<div class="summary-week">本週完成 ${weekDone} 項 ✓</div>`
+          : `<div class="summary-week" style="color:#bbb">本週尚無完成項目</div>`}
+      </div>
+    </div>`;
+}
+
 // ── render ─────────────────────────────────────────────────
 function renderGoals() {
+  renderSummary();
   const list = document.getElementById("goals-list");
   let goals  = allGoals.filter(g => g.status !== "done" && g.status !== "archived");
   if (activeTab !== "all") goals = goals.filter(g => g.category === activeTab);
