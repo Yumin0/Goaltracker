@@ -63,8 +63,24 @@ function getSheet(name) {
   return sheet;
 }
 
-function genId(prefix) {
-  return prefix + "_" + new Date().getTime() + "_" + Math.random().toString(36).substr(2, 5);
+// 將 Date 物件或字串統一格式化為 yyyy-MM-dd
+function fmtDate(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  }
+  return String(val).slice(0, 10);
+}
+
+// 依據工作表第一欄（ID 欄）找出最大純數字 ID，回傳 max+1 的字串
+function genSequentialId(sheet) {
+  const data = sheet.getDataRange().getValues();
+  let max = 0;
+  for (let i = 1; i < data.length; i++) {
+    const n = parseInt(data[i][0], 10);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return String(max + 1);
 }
 
 // 將 sheet rows 轉成 object array
@@ -122,7 +138,7 @@ function getGoals() {
       goal_id:      goalId,
       title:        m.title || "",
       status:       m.status || "pending",
-      completed_at: m.completed_at ? String(m.completed_at).slice(0, 10) : null
+      completed_at: m.completed_at ? fmtDate(m.completed_at) : null
     });
   });
 
@@ -132,7 +148,7 @@ function getGoals() {
       goal_id:     goalId,
       title:       g.title || "",
       category:    g.category || "work",
-      target_date: g.target_date ? String(g.target_date).slice(0, 10) : "",
+      target_date: g.target_date ? fmtDate(g.target_date) : "",
       description: g.description || "",
       status:      g.status || "active",
       milestones:  msMap[goalId] || []
@@ -146,8 +162,7 @@ function getGoals() {
 function createGoal(p) {
   if (!p.title) return { success: false, error: "缺少目標名稱" };
   const sheet = getSheet(GOALS_SHEET);
-  const id    = genId("g");
-  const now   = new Date().toISOString().slice(0, 10);
+  const id    = genSequentialId(sheet);
   sheet.appendRow([id, p.title, p.category || "work", p.description || "", p.target_date || "", "active"]);
   return { success: true, goal_id: id };
 }
@@ -208,8 +223,7 @@ function createMilestone(p) {
   if (!p.goal_id) return { success: false, error: "缺少 goal_id" };
   if (!p.title)   return { success: false, error: "缺少里程碑名稱" };
   const sheet = getSheet(MS_SHEET);
-  const id    = genId("m");
-  const now   = new Date().toISOString().slice(0, 10);
+  const id    = genSequentialId(sheet);
   sheet.appendRow([id, p.goal_id, p.title, "pending", ""]);
   return { success: true, milestone_id: id };
 }
@@ -314,8 +328,8 @@ function getCategories() {
 function createCategory(p) {
   if (!p.name) return { success: false, error: "缺少類別名稱" };
   const sheet = getSheet(CAT_SHEET);
-  const id    = genId("cat");
-  const now   = new Date().toISOString().slice(0, 10);
+  const id    = genSequentialId(sheet);
+  const now   = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
   sheet.appendRow([id, p.name, p.icon || "📌", p.color || "purple", now]);
   return { success: true, category_id: id };
 }
