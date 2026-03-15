@@ -770,8 +770,9 @@ function showConfirm(msg, cb) {
   confirmCallback = cb;
   document.getElementById("confirm-overlay").classList.add("open");
   document.getElementById("confirm-ok").onclick = () => {
+    const cb = confirmCallback;
     closeConfirm();
-    if (confirmCallback) confirmCallback();
+    if (cb) cb();
   };
 }
 function closeConfirm() {
