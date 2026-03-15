@@ -419,7 +419,7 @@ async function saveGoal() {
 // ── 刪除目標 ───────────────────────────────────────────────
 function confirmDeleteGoal(goalId) {
   const goal = allGoals.find(g => g.goal_id === goalId);
-  if (!goal) return;
+  if (!goal) { toast("找不到目標資料，請重新整理頁面", true); return; }
   showConfirm(`確定要刪除目標「${goal.title}」嗎？\n此操作無法復原。`, async () => {
     try {
       await api({ action: "deleteGoal", goal_id: goalId });
@@ -514,9 +514,9 @@ async function saveMilestone() {
 // ── 刪除里程碑 ─────────────────────────────────────────────
 function confirmDeleteMs(goalId, msId) {
   const goal = allGoals.find(g => g.goal_id === goalId);
-  if (!goal) return;
+  if (!goal) { toast("找不到目標資料，請重新整理頁面", true); return; }
   const ms = (goal.milestones || []).find(m => m.milestone_id === msId);
-  if (!ms) return;
+  if (!ms) { toast("找不到里程碑資料，請重新整理頁面", true); return; }
   showConfirm(`確定要刪除里程碑「${ms.title}」嗎？`, async () => {
     try {
       await api({ action: "deleteMilestone", milestone_id: msId });
@@ -557,7 +557,7 @@ function toast(msg, isErr = false) {
   el.textContent = msg;
   el.className = isErr ? "err show" : "show";
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.className = isErr ? "err" : "", 2500);
+  toastTimer = setTimeout(() => el.className = isErr ? "err" : "", isErr ? 5000 : 2500);
 }
 </script>
 </body>
