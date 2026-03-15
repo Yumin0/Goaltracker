@@ -12,12 +12,15 @@
   header { background: #fff; border-bottom: 1px solid #e5e5e5; padding: 14px 20px;
            display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
   header h1 { font-size: 18px; font-weight: 600; }
+  .header-btn { padding: 6px 12px; font-size: 13px; border-radius: 8px; border: 1px solid #e5e5e5;
+                background: #fff; cursor: pointer; color: #555; display: flex; align-items: center; gap: 5px; }
+  .header-btn:hover { background: #f5f5f5; }
 
   /* ── layout ── */
   main { max-width: 700px; margin: 0 auto; padding: 16px 16px 80px; }
 
   /* ── tabs ── */
-  .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
   .tab { padding: 7px 16px; border-radius: 8px; font-size: 14px; border: 1px solid #e5e5e5;
          cursor: pointer; background: #fff; }
   .tab.active { background: #222; color: #fff; border-color: #222; }
@@ -26,15 +29,12 @@
   .goal-item { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
   .goal-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
   .badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
-  .badge.work { background: #eeedfe; color: #534ab7; }
-  .badge.life { background: #e1f5ee; color: #0f6e56; }
   .goal-title { font-weight: 600; font-size: 15px; flex: 1; }
   .goal-meta { font-size: 12px; color: #888; margin-bottom: 8px; }
 
   /* progress bar */
   .progress-wrap { background: #f0f0f0; border-radius: 4px; height: 6px; margin-bottom: 4px; }
   .progress-bar { height: 6px; border-radius: 4px; background: #534ab7; transition: width .3s; }
-  .progress-bar.life { background: #1d9e75; }
   .progress-label { font-size: 12px; color: #888; }
 
   /* ── collapsible goal ── */
@@ -154,19 +154,33 @@
   .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ddd;
              border-top-color: #666; border-radius: 50%; animation: spin .7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── 類別管理 ── */
+  .cat-modal { max-width: 520px; }
+  .cat-list { max-height: 260px; overflow-y: auto; margin-bottom: 4px; }
+  .cat-item { display: flex; align-items: center; gap: 10px; padding: 8px 0;
+              border-bottom: 1px solid #f5f5f5; }
+  .cat-item:last-child { border-bottom: none; }
+  .cat-form-section { border-top: 1px solid #eee; margin-top: 12px; padding-top: 14px; }
+  .cat-form-title { font-size: 13px; font-weight: 600; color: #444; margin-bottom: 12px; }
+  .color-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+  .color-dot {
+    width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+    border: 2px solid transparent; transition: transform .15s, border-color .15s; }
+  .color-dot:hover { transform: scale(1.15); }
+  .color-dot.selected { border-color: #222; box-shadow: 0 0 0 2px #fff inset; }
 </style>
 </head>
 <body>
 
 <header>
   <h1>🎯 Goal Tracker</h1>
+  <button class="header-btn" onclick="openCatModal()">🗂️ 管理類別</button>
 </header>
 
 <main>
-  <div class="tabs">
-    <button class="tab active" onclick="setTab('all', this)">全部</button>
-    <button class="tab" onclick="setTab('work', this)">💼 工作</button>
-    <button class="tab" onclick="setTab('life', this)">🌿 生活</button>
+  <div class="tabs" id="tabs-container">
+    <div class="empty" style="padding:4px 0;">載入中… <span class="spinner"></span></div>
   </div>
   <div id="goals-list"><div class="empty">載入中… <span class="spinner"></span></div></div>
 </main>
@@ -187,10 +201,7 @@
     <div class="form-row-2">
       <div class="form-row" style="margin:0">
         <label>類別</label>
-        <select id="g-category">
-          <option value="work">💼 工作</option>
-          <option value="life">🌿 生活</option>
-        </select>
+        <select id="g-category"></select>
       </div>
       <div class="form-row" style="margin:0">
         <label>截止日</label>
@@ -226,6 +237,38 @@
   </div>
 </div>
 
+<!-- 類別管理 Modal -->
+<div class="modal-overlay" id="cat-modal-overlay" onclick="closeCatModalOverlay(event)">
+  <div class="modal cat-modal">
+    <div class="modal-header">
+      <h2>🗂️ 管理類別</h2>
+      <button class="modal-close" onclick="closeCatModal()">✕</button>
+    </div>
+    <div class="cat-list" id="cat-list"></div>
+    <div class="cat-form-section">
+      <div class="cat-form-title" id="cat-form-title">新增類別</div>
+      <div class="form-row-2" style="margin-bottom:10px">
+        <div class="form-row" style="margin:0">
+          <label>名稱 *</label>
+          <input id="cat-name" type="text" placeholder="例：健康">
+        </div>
+        <div class="form-row" style="margin:0">
+          <label>圖示（Emoji）</label>
+          <input id="cat-icon" type="text" placeholder="例：💪" maxlength="4">
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:12px">
+        <label>顏色</label>
+        <div class="color-picker" id="cat-color-picker"></div>
+      </div>
+      <div class="btn-row">
+        <button class="primary small" id="cat-save-btn" onclick="saveCat()">新增</button>
+        <button class="small" id="cat-cancel-edit" onclick="resetCatForm()" style="display:none">取消編輯</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 確認刪除對話框 -->
 <div class="confirm-overlay" id="confirm-overlay">
   <div class="confirm-box">
@@ -244,16 +287,29 @@
 const API_URL   = "https://script.google.com/macros/s/AKfycbwq9Q7f4XFF0LmsdTgx65eM4V32jAic4ReAIn-CVBmwMEUW4gRXDi1jB1uXovQ-2AgYZA/exec";
 const API_TOKEN = "goaltracker2026";
 
+// ── 顏色主題 ──────────────────────────────────────────────
+const COLOR_THEMES = {
+  purple: { bg: "#eeedfe", text: "#534ab7", bar: "#534ab7" },
+  green:  { bg: "#e1f5ee", text: "#0f6e56", bar: "#1d9e75" },
+  blue:   { bg: "#dbeafe", text: "#1d4ed8", bar: "#3b82f6" },
+  orange: { bg: "#fff7ed", text: "#c2410c", bar: "#f97316" },
+  pink:   { bg: "#fce7f3", text: "#be185d", bar: "#ec4899" },
+  teal:   { bg: "#ccfbf1", text: "#0f766e", bar: "#14b8a6" },
+};
+
 // ── state ──────────────────────────────────────────────────
 let allGoals        = [];
+let allCategories   = [];
 let activeTab       = "all";
 let editingGoalId   = null;
 let editingMsId     = null;
 let editingMsGoalId = null;
+let editingCatId    = null;
+let editingCatColor = "purple";
 const expandedGoals = new Set();
 
 // ── init ───────────────────────────────────────────────────
-window.addEventListener("DOMContentLoaded", loadGoals);
+window.addEventListener("DOMContentLoaded", loadAll);
 
 // ── API call ───────────────────────────────────────────────
 async function api(params) {
@@ -268,7 +324,25 @@ async function api(params) {
   return data;
 }
 
-// ── load goals ─────────────────────────────────────────────
+// ── load all ───────────────────────────────────────────────
+async function loadAll() {
+  try {
+    const [goalsData, catsData] = await Promise.all([
+      api({ action: "getGoals" }),
+      api({ action: "getCategories" })
+    ]);
+    allGoals      = goalsData.data;
+    allCategories = catsData.data;
+    renderTabs();
+    renderGoals();
+  } catch (e) {
+    toast("連線失敗：" + e.message, true);
+    document.getElementById("goals-list").innerHTML = `<div class="empty">❌ ${esc(e.message)}</div>`;
+    document.getElementById("tabs-container").innerHTML = '<button class="tab active" onclick="setTab(\'all\', this)">全部</button>';
+  }
+}
+
+// ── 載入目標（重新整理用）─────────────────────────────────
 async function loadGoals() {
   try {
     const data = await api({ action: "getGoals" });
@@ -276,11 +350,28 @@ async function loadGoals() {
     renderGoals();
   } catch (e) {
     toast("連線失敗：" + e.message, true);
-    document.getElementById("goals-list").innerHTML = `<div class="empty">❌ ${esc(e.message)}</div>`;
   }
 }
 
+// ── 取得類別資訊 ───────────────────────────────────────────
+function getCatInfo(categoryId) {
+  const cat = allCategories.find(c => c.category_id === categoryId);
+  return cat || { category_id: categoryId, name: categoryId, icon: "📌", color: "purple" };
+}
+
 // ── tabs & expand ──────────────────────────────────────────
+function renderTabs() {
+  const container = document.getElementById("tabs-container");
+  const tabs = [
+    `<button class="tab${activeTab === "all" ? " active" : ""}" onclick="setTab('all', this)">全部</button>`
+  ];
+  allCategories.forEach(c => {
+    const isActive = activeTab === c.category_id;
+    tabs.push(`<button class="tab${isActive ? " active" : ""}" onclick="setTab('${esc(c.category_id)}', this)">${esc(c.icon)} ${esc(c.name)}</button>`);
+  });
+  container.innerHTML = tabs.join("");
+}
+
 function setTab(tab, el) {
   activeTab = tab;
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -311,7 +402,8 @@ function renderGoals() {
     const total  = (g.milestones || []).length;
     const done   = (g.milestones || []).filter(m => m.status === "done").length;
     const pct    = total ? Math.round(done / total * 100) : 0;
-    const isLife = g.category === "life";
+    const cat    = getCatInfo(g.category);
+    const theme  = COLOR_THEMES[cat.color] || COLOR_THEMES.purple;
     const isOpen = expandedGoals.has(g.goal_id);
 
     const msHtml = (g.milestones || []).map(m => `
@@ -327,12 +419,12 @@ function renderGoals() {
     <div class="goal-item${isOpen?" open":""}" id="goal-${g.goal_id}">
       <div class="goal-summary" onclick="toggleGoal('${g.goal_id}')">
         <div class="goal-header">
-          <span class="badge ${g.category}">${isLife?"🌿 生活":"💼 工作"}</span>
+          <span class="badge" style="background:${theme.bg};color:${theme.text}">${esc(cat.icon)} ${esc(cat.name)}</span>
           <span class="goal-title">${esc(g.title)}</span>
           <span class="goal-chevron">▶</span>
         </div>
         <div class="goal-meta">${g.target_date ? "截止 " + g.target_date : "無截止日"} · ${done}/${total} 里程碑</div>
-        <div class="progress-wrap"><div class="progress-bar ${isLife?"life":""}" style="width:${pct}%"></div></div>
+        <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%;background:${theme.bar}"></div></div>
         <div class="progress-label">${pct}%</div>
       </div>
       <div class="goal-detail">
@@ -352,14 +444,22 @@ function renderGoals() {
 }
 
 // ── 目標 Modal ─────────────────────────────────────────────
+function populateCatSelect(selectedId) {
+  const sel = document.getElementById("g-category");
+  sel.innerHTML = allCategories.map(c =>
+    `<option value="${esc(c.category_id)}"${c.category_id === selectedId ? " selected" : ""}>${esc(c.icon)} ${esc(c.name)}</option>`
+  ).join("");
+  if (!sel.innerHTML) sel.innerHTML = '<option value="">（尚無類別）</option>';
+}
+
 function openGoalModal() {
   editingGoalId = null;
   document.getElementById("modal-title").textContent = "➕ 新增目標";
   document.getElementById("save-btn").textContent = "新增目標";
-  document.getElementById("g-title").value    = "";
-  document.getElementById("g-category").value = "work";
-  document.getElementById("g-date").value     = "";
-  document.getElementById("g-desc").value     = "";
+  document.getElementById("g-title").value = "";
+  document.getElementById("g-date").value  = "";
+  document.getElementById("g-desc").value  = "";
+  populateCatSelect(allCategories[0]?.category_id || "");
   document.getElementById("modal-overlay").classList.add("open");
   setTimeout(() => document.getElementById("g-title").focus(), 50);
 }
@@ -370,17 +470,17 @@ function openGoalEditModal(goalId) {
   editingGoalId = goalId;
   document.getElementById("modal-title").textContent  = "✏️ 編輯目標";
   document.getElementById("save-btn").textContent     = "儲存修改";
-  document.getElementById("g-title").value    = goal.title || "";
-  document.getElementById("g-category").value = goal.category || "work";
-  document.getElementById("g-date").value     = goal.target_date || "";
-  document.getElementById("g-desc").value     = goal.description || "";
+  document.getElementById("g-title").value = goal.title || "";
+  document.getElementById("g-date").value  = goal.target_date || "";
+  document.getElementById("g-desc").value  = goal.description || "";
+  populateCatSelect(goal.category || "");
   document.getElementById("modal-overlay").classList.add("open");
   setTimeout(() => document.getElementById("g-title").focus(), 50);
 }
 
 function closeModal() { document.getElementById("modal-overlay").classList.remove("open"); }
 function closeModalOverlay(e) { if (e.target === document.getElementById("modal-overlay")) closeModal(); }
-document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); closeMsModal(); } });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); closeMsModal(); closeCatModal(); } });
 
 // ── 儲存目標（新增 / 編輯）────────────────────────────────────
 async function saveGoal() {
@@ -460,7 +560,6 @@ async function toggleMs(msId, checkbox) {
   try {
     await api({ action: "toggleMilestone", milestone_id: msId });
     await loadGoals();
-    // 保持所有已展開的目標
     expandedGoals.forEach(id => {
       const el = document.getElementById("goal-" + id);
       if (el) el.classList.add("open");
@@ -525,6 +624,139 @@ function confirmDeleteMs(goalId, msId) {
       expandedGoals.add(goalId);
       const el = document.getElementById("goal-" + goalId);
       if (el) el.classList.add("open");
+    } catch (e) {
+      toast(e.message, true);
+    }
+  });
+}
+
+// ── 類別管理 Modal ─────────────────────────────────────────
+function openCatModal() {
+  editingCatId    = null;
+  editingCatColor = "purple";
+  resetCatForm();
+  renderCatList();
+  document.getElementById("cat-modal-overlay").classList.add("open");
+  setTimeout(() => document.getElementById("cat-name").focus(), 50);
+}
+
+function closeCatModal() {
+  document.getElementById("cat-modal-overlay").classList.remove("open");
+  resetCatForm();
+}
+
+function closeCatModalOverlay(e) {
+  if (e.target === document.getElementById("cat-modal-overlay")) closeCatModal();
+}
+
+function renderCatList() {
+  const list = document.getElementById("cat-list");
+  if (!allCategories.length) {
+    list.innerHTML = '<div class="empty" style="padding:12px 0;">尚無類別，請先新增</div>';
+    return;
+  }
+  list.innerHTML = allCategories.map(c => {
+    const theme = COLOR_THEMES[c.color] || COLOR_THEMES.purple;
+    const goalsCount = allGoals.filter(g => g.category === c.category_id).length;
+    return `<div class="cat-item">
+      <span class="badge" style="background:${theme.bg};color:${theme.text}">${esc(c.icon)} ${esc(c.name)}</span>
+      <span style="font-size:12px;color:#aaa;flex:1">${goalsCount > 0 ? goalsCount + " 個目標" : ""}</span>
+      <button class="btn-icon" onclick="openCatEdit('${esc(c.category_id)}')">✏️ 編輯</button>
+      <button class="btn-icon danger" onclick="confirmDeleteCat('${esc(c.category_id)}')">🗑️ 刪除</button>
+    </div>`;
+  }).join("");
+}
+
+function renderColorPicker(selected) {
+  const container = document.getElementById("cat-color-picker");
+  container.innerHTML = Object.entries(COLOR_THEMES).map(([key, t]) =>
+    `<span class="color-dot${selected === key ? " selected" : ""}"
+      style="background:${t.bar}"
+      title="${key}"
+      onclick="selectCatColor('${key}')"></span>`
+  ).join("");
+}
+
+function selectCatColor(color) {
+  editingCatColor = color;
+  renderColorPicker(color);
+}
+
+function resetCatForm() {
+  editingCatId    = null;
+  editingCatColor = "purple";
+  document.getElementById("cat-name").value        = "";
+  document.getElementById("cat-icon").value        = "";
+  document.getElementById("cat-form-title").textContent = "新增類別";
+  document.getElementById("cat-save-btn").textContent   = "新增";
+  document.getElementById("cat-cancel-edit").style.display = "none";
+  renderColorPicker("purple");
+}
+
+function openCatEdit(catId) {
+  const cat = allCategories.find(c => c.category_id === catId);
+  if (!cat) return;
+  editingCatId    = catId;
+  editingCatColor = cat.color || "purple";
+  document.getElementById("cat-name").value        = cat.name || "";
+  document.getElementById("cat-icon").value        = cat.icon || "";
+  document.getElementById("cat-form-title").textContent = "編輯類別";
+  document.getElementById("cat-save-btn").textContent   = "儲存修改";
+  document.getElementById("cat-cancel-edit").style.display = "";
+  renderColorPicker(editingCatColor);
+  document.getElementById("cat-name").focus();
+}
+
+async function saveCat() {
+  const name = document.getElementById("cat-name").value.trim();
+  if (!name) { toast("請輸入類別名稱", true); return; }
+  const icon  = document.getElementById("cat-icon").value.trim() || "📌";
+  const color = editingCatColor;
+  const btn   = document.getElementById("cat-save-btn");
+  btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = "儲存中…";
+
+  try {
+    if (editingCatId) {
+      await api({ action: "updateCategory", category_id: editingCatId, name, icon, color });
+      toast("類別已更新！");
+    } else {
+      await api({ action: "createCategory", name, icon, color });
+      toast("類別已新增！");
+    }
+    // 重新載入類別與畫面
+    const catsData = await api({ action: "getCategories" });
+    allCategories = catsData.data;
+    renderTabs();
+    renderGoals();
+    renderCatList();
+    resetCatForm();
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
+function confirmDeleteCat(catId) {
+  const cat = allCategories.find(c => c.category_id === catId);
+  if (!cat) return;
+  const goalsCount = allGoals.filter(g => g.category === catId).length;
+  const warn = goalsCount > 0 ? `\n（此類別下有 ${goalsCount} 個目標，類別刪除後這些目標的類別標籤將顯示為未知）` : "";
+  showConfirm(`確定要刪除類別「${cat.name}」嗎？${warn}`, async () => {
+    try {
+      await api({ action: "deleteCategory", category_id: catId });
+      toast("類別已刪除");
+      const catsData = await api({ action: "getCategories" });
+      allCategories = catsData.data;
+      // 若目前分頁是被刪除的類別，切換回全部
+      if (activeTab === catId) activeTab = "all";
+      renderTabs();
+      renderGoals();
+      renderCatList();
+      resetCatForm();
     } catch (e) {
       toast(e.message, true);
     }
