@@ -45,9 +45,9 @@ function getSheet(name) {
   if (!sheet) {
     sheet = ss.insertSheet(name);
     if (name === GOALS_SHEET) {
-      sheet.appendRow(["goal_id", "title", "category", "target_date", "description", "status", "created_at"]);
+      sheet.appendRow(["goal_id", "title", "category", "description", "target_date", "status"]);
     } else if (name === MS_SHEET) {
-      sheet.appendRow(["milestone_id", "goal_id", "title", "status", "completed_at", "created_at"]);
+      sheet.appendRow(["milestone_id", "goal_id", "title", "status", "completed_at", "note"]);
     }
   }
   return sheet;
@@ -138,7 +138,7 @@ function createGoal(p) {
   const sheet = getSheet(GOALS_SHEET);
   const id    = genId("g");
   const now   = new Date().toISOString().slice(0, 10);
-  sheet.appendRow([id, p.title, p.category || "work", p.target_date || "", p.description || "", "active", now]);
+  sheet.appendRow([id, p.title, p.category || "work", p.description || "", p.target_date || "", "active"]);
   return { success: true, goal_id: id };
 }
 
@@ -200,7 +200,7 @@ function createMilestone(p) {
   const sheet = getSheet(MS_SHEET);
   const id    = genId("m");
   const now   = new Date().toISOString().slice(0, 10);
-  sheet.appendRow([id, p.goal_id, p.title, "pending", "", now]);
+  sheet.appendRow([id, p.goal_id, p.title, "pending", ""]);
   return { success: true, milestone_id: id };
 }
 
