@@ -30,6 +30,8 @@ function doGet(e) {
       case "createCategory":   return jsonResp(createCategory(e.parameter));
       case "updateCategory":   return jsonResp(updateCategory(e.parameter));
       case "deleteCategory":   return jsonResp(deleteCategory(e.parameter));
+      case "generateAiSummary": return jsonResp(generateAiSummary());
+      case "askAi":            return jsonResp(askAi(e.parameter));
       default: return jsonResp({ success: false, error: "Unknown action: " + action });
     }
   } catch (err) {
@@ -370,4 +372,110 @@ function deleteCategory(p) {
     }
   }
   return { success: false, error: "找不到類別" };
+}
+
+// ── Gemini AI helpers ──────────────────────────────────────
+function callGemini(prompt) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
+  if (!apiKey) return { success: false, error: "尚未設定 GEMINI_API_KEY，請至 Apps Script「專案設定 > 指令碼屬性」新增。" };
+
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + apiKey;
+  const payload = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.7, maxOutputTokens: 512 }
+  });
+
+  try {
+    const resp = UrlFetchApp.fetch(url, {
+      method: "post",
+      contentType: "application/json",
+      payload: payload,
+      muteHttpExceptions: true
+    });
+    const result = JSON.parse(resp.getContentText());
+    if (result.error) return { success: false, error: result.error.message };
+    const text = result.candidates[0].content.parts[0].text;
+    return { success: true, text: text };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+function buildSummaryPrompt(goals) {
+  const today = new Date();
+  const todayStr = Utilities.formatDate(today, Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+  const dayOfWk  = (today.getDay() + 6) % 7;
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - dayOfWk);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const activeGoals = goals.filter(g => g.status !== "done" && g.status !== "archived");
+
+  const goalsDesc = activeGoals.map(g => {
+    const total = (g.milestones || []).length;
+    const done  = (g.milestones || []).filter(m => m.status === "done").length;
+    const pct   = total ? Math.round(done / total * 100) : 0;
+    const weekDone = (g.milestones || []).filter(m => {
+      if (m.status !== "done" || !m.completed_at) return false;
+      return new Date(m.completed_at) >= weekStart;
+    }).length;
+    const daysLeft = g.target_date
+      ? Math.ceil((new Date(g.target_date) - today) / 86400000)
+      : null;
+    return `- 目標：${g.title}（類別：${g.category}，進度：${pct}%，${done}/${total} 里程碑完成` +
+           (weekDone > 0 ? `，本週完成 ${weekDone} 項` : "") +
+           (daysLeft !== null ? `，距截止 ${daysLeft} 天` : "") + ")";
+  }).join("\n");
+
+  return `今天是 ${todayStr}，以下是我的目標追蹤狀況：
+
+${goalsDesc}
+
+請用繁體中文，以一段連貫的話（約 80～120 字）幫我總結本週狀況，內容需涵蓋：
+1. 亮點（有什麼值得肯定的進展）
+2. 注意事項（哪些目標進度落後或即將到期需要注意）
+3. 下週建議（最優先應衝刺哪些目標）
+
+語氣輕鬆直接，不要分點列舉，整合成自然流暢的一段話即可。`;
+}
+
+// ── generateAiSummary ──────────────────────────────────────
+function generateAiSummary() {
+  const goalsData = getGoals();
+  if (!goalsData.success) return goalsData;
+
+  const prompt = buildSummaryPrompt(goalsData.data);
+  const result = callGemini(prompt);
+  if (!result.success) return result;
+
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "M/d");
+  return { success: true, summary: result.text, generated_at: today };
+}
+
+// ── askAi ──────────────────────────────────────────────────
+function askAi(p) {
+  if (!p.question) return { success: false, error: "缺少問題內容" };
+
+  const goalsData = getGoals();
+  const goals     = goalsData.success ? goalsData.data : [];
+  const activeGoals = goals.filter(g => g.status !== "done" && g.status !== "archived");
+
+  const goalsDesc = activeGoals.map(g => {
+    const total = (g.milestones || []).length;
+    const done  = (g.milestones || []).filter(m => m.status === "done").length;
+    const pct   = total ? Math.round(done / total * 100) : 0;
+    return `- ${g.title}（${pct}%，截止：${g.target_date || "未設定"}）`;
+  }).join("\n");
+
+  const prompt = `以下是使用者的目標追蹤資料：
+${goalsDesc || "（目前沒有進行中的目標）"}
+
+使用者問題：${p.question}
+
+請用繁體中文，簡潔地回答（100字以內），聚焦在目標管理相關的實用建議。`;
+
+  const result = callGemini(prompt);
+  if (!result.success) return result;
+  return { success: true, answer: result.text };
 }
