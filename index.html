@@ -163,6 +163,39 @@
   .summary-nums  { font-size: 15px; font-weight: 600; color: #222; margin-bottom: 4px; }
   .summary-week  { font-size: 12px; color: #1d9e75; }
 
+  /* ── AI summary card ── */
+  .ai-card {
+    background: #fff; border: 1px solid #eee; border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 16px; }
+  .ai-card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px; }
+  .ai-card-title {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 14px; font-weight: 600; color: #534ab7; }
+  .ai-card-date { font-size: 12px; color: #aaa; }
+  .ai-card-body { font-size: 14px; line-height: 1.7; color: #444; margin-bottom: 12px; }
+  .ai-card-actions { display: flex; gap: 8px; }
+  .ai-btn {
+    flex: 1; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    cursor: pointer; border: 1px solid #e5e5e5; background: #fff; color: #555;
+    transition: background .15s; text-align: center; }
+  .ai-btn:hover { background: #f5f5f5; }
+  .ai-btn.primary { background: #534ab7; color: #fff; border-color: #534ab7; }
+  .ai-btn.primary:hover { background: #6358cc; }
+  .ai-card-placeholder {
+    font-size: 13px; color: #aaa; text-align: center; padding: 8px 0; margin-bottom: 12px; }
+
+  /* ── 問 AI modal ── */
+  .ai-chat-history {
+    max-height: 260px; overflow-y: auto; margin-bottom: 12px;
+    display: flex; flex-direction: column; gap: 10px; }
+  .ai-msg { padding: 10px 13px; border-radius: 10px; font-size: 14px; line-height: 1.6; max-width: 90%; }
+  .ai-msg.user { background: #534ab7; color: #fff; align-self: flex-end; }
+  .ai-msg.bot  { background: #f5f5f5; color: #333; align-self: flex-start; }
+  .ai-input-row { display: flex; gap: 8px; }
+  .ai-input-row input { flex: 1; }
+
   /* ── empty state ── */
   .empty { text-align: center; color: #bbb; padding: 32px 0; font-size: 14px; }
 
@@ -196,6 +229,7 @@
 
 <main>
   <div id="summary-bar"></div>
+  <div id="ai-summary-section"></div>
   <div class="tabs" id="tabs-container">
     <div class="empty" style="padding:4px 0;">載入中… <span class="spinner"></span></div>
   </div>
@@ -286,6 +320,22 @@
   </div>
 </div>
 
+<!-- 問 AI Modal -->
+<div class="modal-overlay" id="ai-modal-overlay" onclick="closeAiModalOverlay(event)">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <h2>💬 問 AI</h2>
+      <button class="modal-close" onclick="closeAiModal()">✕</button>
+    </div>
+    <div class="ai-chat-history" id="ai-chat-history"></div>
+    <div class="ai-input-row">
+      <input id="ai-question-input" type="text" placeholder="問我關於你的目標任何問題…"
+             onkeydown="if(event.key==='Enter')sendAiQuestion()">
+      <button class="primary small" onclick="sendAiQuestion()">送出</button>
+    </div>
+  </div>
+</div>
+
 <!-- 確認刪除對話框 -->
 <div class="confirm-overlay" id="confirm-overlay">
   <div class="confirm-box">
@@ -352,6 +402,7 @@ async function loadAll() {
     allCategories = catsData.data;
     renderTabs();
     renderGoals();
+    renderAiSummaryCard(aiSummaryCache);
   } catch (e) {
     toast("連線失敗：" + e.message, true);
     document.getElementById("goals-list").innerHTML = `<div class="empty">❌ ${esc(e.message)}</div>`;
@@ -543,7 +594,7 @@ function openGoalEditModal(goalId) {
 
 function closeModal() { document.getElementById("modal-overlay").classList.remove("open"); }
 function closeModalOverlay(e) { if (e.target === document.getElementById("modal-overlay")) closeModal(); }
-document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); closeMsModal(); closeCatModal(); } });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); closeMsModal(); closeCatModal(); closeAiModal(); } });
 
 // ── 儲存目標（新增 / 編輯）────────────────────────────────────
 async function saveGoal() {
@@ -841,6 +892,118 @@ function showConfirm(msg, cb) {
 function closeConfirm() {
   document.getElementById("confirm-overlay").classList.remove("open");
   confirmCallback = null;
+}
+
+// ── AI summary ─────────────────────────────────────────────
+let aiSummaryCache = null; // { summary, generated_at }
+
+function renderAiSummaryCard(state) {
+  const el = document.getElementById("ai-summary-section");
+  if (!el) return;
+
+  if (state === "loading") {
+    el.innerHTML = `
+      <div class="ai-card">
+        <div class="ai-card-header">
+          <span class="ai-card-title">→ AI 週摘要</span>
+        </div>
+        <div class="ai-card-placeholder"><span class="spinner"></span> 生成中，請稍候…</div>
+        <div class="ai-card-actions">
+          <button class="ai-btn" disabled>重新生成</button>
+          <button class="ai-btn primary" onclick="openAiModal()">問 AI ↗</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (state === "error" || !state) {
+    el.innerHTML = `
+      <div class="ai-card">
+        <div class="ai-card-header">
+          <span class="ai-card-title">→ AI 週摘要</span>
+        </div>
+        <div class="ai-card-placeholder">點擊「生成摘要」取得本週 AI 分析</div>
+        <div class="ai-card-actions">
+          <button class="ai-btn" onclick="generateAiSummary()">✨ 生成摘要</button>
+          <button class="ai-btn primary" onclick="openAiModal()">問 AI ↗</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const { summary, generated_at } = state;
+  el.innerHTML = `
+    <div class="ai-card">
+      <div class="ai-card-header">
+        <span class="ai-card-title">→ AI 週摘要</span>
+        <span class="ai-card-date">${esc(generated_at)}</span>
+      </div>
+      <div class="ai-card-body">${esc(summary)}</div>
+      <div class="ai-card-actions">
+        <button class="ai-btn" onclick="generateAiSummary()">重新生成</button>
+        <button class="ai-btn primary" onclick="openAiModal()">問 AI ↗</button>
+      </div>
+    </div>`;
+}
+
+async function generateAiSummary() {
+  renderAiSummaryCard("loading");
+  try {
+    const data = await api({ action: "generateAiSummary" });
+    aiSummaryCache = { summary: data.summary, generated_at: data.generated_at };
+    renderAiSummaryCard(aiSummaryCache);
+  } catch (e) {
+    toast("AI 摘要失敗：" + e.message, true);
+    renderAiSummaryCard("error");
+  }
+}
+
+// ── 問 AI modal ────────────────────────────────────────────
+function openAiModal() {
+  document.getElementById("ai-chat-history").innerHTML = "";
+  document.getElementById("ai-question-input").value = "";
+  document.getElementById("ai-modal-overlay").classList.add("open");
+  setTimeout(() => document.getElementById("ai-question-input").focus(), 50);
+}
+
+function closeAiModal() {
+  document.getElementById("ai-modal-overlay").classList.remove("open");
+}
+
+function closeAiModalOverlay(e) {
+  if (e.target === document.getElementById("ai-modal-overlay")) closeAiModal();
+}
+
+function appendAiMsg(text, role) {
+  const history = document.getElementById("ai-chat-history");
+  const div = document.createElement("div");
+  div.className = "ai-msg " + role;
+  div.textContent = text;
+  history.appendChild(div);
+  history.scrollTop = history.scrollHeight;
+}
+
+async function sendAiQuestion() {
+  const input = document.getElementById("ai-question-input");
+  const question = input.value.trim();
+  if (!question) return;
+  input.value = "";
+  appendAiMsg(question, "user");
+
+  const loadingDiv = document.createElement("div");
+  loadingDiv.className = "ai-msg bot";
+  loadingDiv.innerHTML = '<span class="spinner"></span>';
+  document.getElementById("ai-chat-history").appendChild(loadingDiv);
+  document.getElementById("ai-chat-history").scrollTop = 99999;
+
+  try {
+    const data = await api({ action: "askAi", question });
+    loadingDiv.remove();
+    appendAiMsg(data.answer, "bot");
+  } catch (e) {
+    loadingDiv.remove();
+    appendAiMsg("發生錯誤：" + e.message, "bot");
+  }
 }
 
 // ── helpers ────────────────────────────────────────────────
