@@ -375,6 +375,13 @@ function deleteCategory(p) {
 }
 
 // ── Gemini AI helpers ──────────────────────────────────────
+function listGeminiModels() {
+  const apiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
+  const url = "https://generativelanguage.googleapis.com/v1beta/models?key=" + apiKey;
+  const resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  Logger.log("Status: " + resp.getResponseCode());
+  Logger.log(resp.getContentText());
+}
 function callGemini(prompt) {
   const apiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
   if (!apiKey) return { success: false, error: "尚未設定 GEMINI_API_KEY，請至 Apps Script「專案設定 > 指令碼屬性」新增。" };
