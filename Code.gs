@@ -392,8 +392,12 @@ function callGemini(prompt) {
       payload: payload,
       muteHttpExceptions: true
     });
-    const result = JSON.parse(resp.getContentText());
-    if (result.error) return { success: false, error: result.error.message };
+    const rawText = resp.getContentText();
+    const statusCode = resp.getResponseCode();
+    Logger.log("Gemini status: " + statusCode);
+    Logger.log("Gemini response: " + rawText);
+    const result = JSON.parse(rawText);
+    if (result.error) return { success: false, error: "[" + statusCode + "] " + result.error.message };
     const text = result.candidates[0].content.parts[0].text;
     return { success: true, text: text };
   } catch (err) {
